@@ -1,0 +1,54 @@
+{
+  "expo": {
+    "name": "Mes Feux",
+    "slug": "mes-feux",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "mes-feux",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#FFD60A"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.benoit.mesfeux",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Mes Feux utilise la caméra pour allumer le flash en miroir du feu.",
+        "NSPhotoLibraryUsageDescription": "Mes Feux utilise tes photos pour personnaliser les icônes de programmes.",
+        "NSMicrophoneUsageDescription": "Mes Feux n'utilise pas le micro."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#FFD60A"
+      },
+      "package": "com.benoit.mesfeux",
+      "permissions": [
+        "CAMERA",
+        "READ_MEDIA_IMAGES",
+        "RECEIVE_BOOT_COMPLETED",
+        "SCHEDULE_EXACT_ALARM",
+        "VIBRATE"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-notifications",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Mes Feux utilise la caméra pour allumer le flash en miroir du feu."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Mes Feux utilise tes photos pour personnaliser les icônes de programmes."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
