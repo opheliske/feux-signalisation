@@ -3,7 +3,7 @@ import { View, Animated, StyleSheet } from "react-native";
 import { Lampe as LampeType, couleurLampe, couleurs, espacements } from "../theme";
 
 type Props = {
-  lampActive: LampeType | null;
+  lampesActives: LampeType[];
   taille?: number;
 };
 
@@ -60,14 +60,14 @@ function LampeAvecHalo({ lampe, active, taille }: { lampe: LampeType; active: bo
   );
 }
 
-export default function Feu({ lampActive, taille = 44 }: Props) {
+export default function Feu({ lampesActives, taille = 44 }: Props) {
   return (
     <View style={styles.boitier} accessibilityLabel="Feu de signalisation">
       {LAMPES.map((lampe) => (
         <LampeAvecHalo
           key={lampe}
           lampe={lampe}
-          active={lampActive === lampe}
+          active={lampesActives.includes(lampe)}
           taille={taille}
         />
       ))}

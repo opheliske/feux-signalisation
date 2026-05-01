@@ -13,16 +13,19 @@ import { useFeuStore } from "../stores/useFeuStore";
 // };
 
 export async function surChangementEtape(
-  lampe: Lampe,
+  lampes: Lampe[],
   reglages: Reglages
 ): Promise<void> {
+  const lampePrincipale: Lampe =
+    lampes.find((l) => l !== "eteint") ?? "eteint";
+
   if (reglages.ledFlash) {
     // torchAllume est lu par le CameraView caché dans le miroir
-    useFeuStore.getState().setTorchAllume(lampe !== "eteint");
+    useFeuStore.getState().setTorchAllume(lampePrincipale !== "eteint");
   }
 
   if (reglages.sons) {
-    await _jouerSon(lampe);
+    await _jouerSon(lampePrincipale);
   }
 }
 

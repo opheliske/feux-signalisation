@@ -4,7 +4,7 @@ export type Lampe = "vert" | "orange" | "rouge" | "eteint";
 
 export type Etape = {
   id: string;
-  lampe: Lampe;
+  lampes: Lampe[]; // une ou plusieurs lampes allumées en même temps
   dureeSecondes: number; // 1..60
 };
 
@@ -102,10 +102,15 @@ export function couleurFondMiroir(lampe: Lampe): string {
   return map[lampe];
 }
 
+export function libelleLampes(lampes: Lampe[]): string {
+  if (lampes.length === 0) return labelLampe.eteint;
+  return lampes.map((l) => labelLampe[l]).join(" + ");
+}
+
 export function resumeProgramme(etapes: Etape[]): string {
   if (etapes.length === 0) return "Aucune étape";
   return etapes
-    .map((e) => `${labelLampe[e.lampe]} ${e.dureeSecondes} s`)
+    .map((e) => `${libelleLampes(e.lampes)} ${e.dureeSecondes} s`)
     .join(", puis ");
 }
 

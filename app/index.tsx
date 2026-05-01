@@ -212,7 +212,10 @@ export default function Accueil() {
             ref={bouleDisco}
             size={130}
             anime={reglages.animationLogo}
-            lampeActive={etapeActuelle?.lampe}
+            lampeActive={
+              etapeActuelle?.lampes.find((l) => l !== "eteint") ??
+              etapeActuelle?.lampes[0]
+            }
           />
         </View>
 

@@ -9,7 +9,7 @@ import {
   espacements,
   typo,
   tactile,
-  labelLampe,
+  libelleLampes,
 } from "../theme";
 
 type Props = {
@@ -50,7 +50,7 @@ export default function BlocEnLecture({ etat, programme, onPause, onStop }: Prop
 
           <Text style={styles.etapeLabel} accessibilityLiveRegion="polite">
             Étape {etat.etapeIndex + 1} sur {nbEtapes}
-            {etapeActuelle ? ` — ${labelLampe[etapeActuelle.lampe]}` : ""}
+            {etapeActuelle ? ` — ${libelleLampes(etapeActuelle.lampes)}` : ""}
           </Text>
 
           <View

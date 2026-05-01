@@ -29,17 +29,20 @@ export default function Miroir() {
   const etapeActuelle = programme
     ? (programme.etapes[etat.etapeIndex] ?? null)
     : null;
-  const lampe: Lampe = etapeActuelle?.lampe ?? "eteint";
-  const fondColor = couleurFondMiroir(lampe);
-  const couleurCercle =
-    lampe !== "eteint" ? couleurs[lampe].allumee : "#444444";
+  const lampes: Lampe[] =
+    etapeActuelle && etapeActuelle.lampes.length > 0
+      ? etapeActuelle.lampes
+      : ["eteint"];
+  const lampePrincipale: Lampe =
+    lampes.find((l) => l !== "eteint") ?? "eteint";
+  const fondColor = couleurFondMiroir(lampePrincipale);
 
   const pulse = useRef(new Animated.Value(1)).current;
   const animRef = useRef<Animated.CompositeAnimation | null>(null);
 
   useEffect(() => {
     animRef.current?.stop();
-    if (lampe === "eteint") {
+    if (lampePrincipale === "eteint") {
       pulse.setValue(1);
       return;
     }
@@ -61,7 +64,7 @@ export default function Miroir() {
     );
     animRef.current.start();
     return () => animRef.current?.stop();
-  }, [lampe, pulse]);
+  }, [lampePrincipale, pulse]);
 
   return (
     <TouchableOpacity
@@ -72,12 +75,28 @@ export default function Miroir() {
       accessibilityRole="button"
     >
       <RNStatusBar hidden />
-      <Animated.View
-        style={[
-          styles.cercle,
-          { backgroundColor: couleurCercle, transform: [{ scale: pulse }] },
-        ]}
-      />
+      <View style={styles.pile}>
+        {lampes.map((l) => {
+          const couleurCercle =
+            l !== "eteint" ? couleurs[l].allumee : "#444444";
+          const taille = (RAYON * 2) / Math.max(1, lampes.length);
+          return (
+            <Animated.View
+              key={l}
+              style={[
+                {
+                  width: taille,
+                  height: taille,
+                  borderRadius: taille / 2,
+                  opacity: 0.85,
+                  backgroundColor: couleurCercle,
+                  transform: [{ scale: pulse }],
+                },
+              ]}
+            />
+          );
+        })}
+      </View>
       {torchAllume && <TorchView />}
     </TouchableOpacity>
   );
@@ -108,11 +127,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  cercle: {
-    width: RAYON * 2,
-    height: RAYON * 2,
-    borderRadius: RAYON,
-    opacity: 0.85,
+  pile: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 16,
   },
   cameraCache: {
     position: "absolute",

@@ -27,7 +27,7 @@ import {
   espacements,
   typo,
   tactile,
-  labelLampe,
+  libelleLampes,
   couleurPastille,
 } from "../../theme";
 
@@ -53,7 +53,10 @@ export default function EcranProgramme() {
     programmeExistant?.etapes ?? []
   );
 
-  const [showSelLampe, setShowSelLampe] = useState(false);
+  const [indexEditionLampes, setIndexEditionLampes] = useState<number | null>(
+    null
+  );
+  const [ajoutLampes, setAjoutLampes] = useState(false);
   const [indexDuree, setIndexDuree] = useState<number | null>(null);
   const [showConfirmSuppr, setShowConfirmSuppr] = useState(false);
   const [showConfirmAnnuler, setShowConfirmAnnuler] = useState(false);
@@ -115,9 +118,21 @@ export default function EcranProgramme() {
     }
   };
 
-  const ajouterEtape = (lampe: Lampe) => {
-    setEtapes((prev) => [...prev, { id: genId(), lampe, dureeSecondes: 3 }]);
-    setShowSelLampe(false);
+  const ajouterEtape = (lampes: Lampe[]) => {
+    if (lampes.length === 0) return;
+    setEtapes((prev) => [
+      ...prev,
+      { id: genId(), lampes, dureeSecondes: 3 },
+    ]);
+    setAjoutLampes(false);
+  };
+
+  const modifierLampes = (index: number, lampes: Lampe[]) => {
+    if (lampes.length === 0) return;
+    setEtapes((prev) =>
+      prev.map((e, i) => (i === index ? { ...e, lampes } : e))
+    );
+    setIndexEditionLampes(null);
   };
 
   const modifierDuree = (index: number, duree: number) => {
@@ -182,13 +197,30 @@ export default function EcranProgramme() {
           {etapes.map((etape, i) => (
             <View key={etape.id} style={styles.carteEtape}>
               <Text style={styles.numEtape}>{i + 1}</Text>
-              <View
-                style={[
-                  styles.pastilleEtape,
-                  { backgroundColor: couleurPastille(etape.lampe) },
-                ]}
-              />
-              <Text style={styles.nomLampe}>{labelLampe[etape.lampe]}</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  vibrer();
+                  setIndexEditionLampes(i);
+                }}
+                style={styles.zoneLampes}
+                accessibilityLabel={`Modifier les lampes de l'étape ${i + 1}, actuellement ${libelleLampes(etape.lampes)}`}
+                accessibilityRole="button"
+              >
+                <View style={styles.pastilles}>
+                  {etape.lampes.map((l) => (
+                    <View
+                      key={l}
+                      style={[
+                        styles.pastilleEtape,
+                        { backgroundColor: couleurPastille(l) },
+                      ]}
+                    />
+                  ))}
+                </View>
+                <Text style={styles.nomLampe} numberOfLines={1}>
+                  {libelleLampes(etape.lampes)}
+                </Text>
+              </TouchableOpacity>
 
               <TouchableOpacity
                 onPress={() => setIndexDuree(i)}
@@ -237,7 +269,7 @@ export default function EcranProgramme() {
           <TouchableOpacity
             onPress={() => {
               vibrer();
-              setShowSelLampe(true);
+              setAjoutLampes(true);
             }}
             style={styles.btnAjouter}
             accessibilityLabel="Ajouter une étape"
@@ -296,23 +328,51 @@ export default function EcranProgramme() {
       {/* Confettis */}
       <Confettis ref={confettisRef} />
 
-      {/* Modal : choisir une lampe */}
+      {/* Modal : ajouter une étape (sélection de lampes) */}
       <Modal
-        visible={showSelLampe}
+        visible={ajoutLampes}
         transparent
         animationType="slide"
-        onRequestClose={() => setShowSelLampe(false)}
+        onRequestClose={() => setAjoutLampes(false)}
         accessibilityViewIsModal
       >
         <TouchableOpacity
           style={styles.fondModal}
-          onPress={() => setShowSelLampe(false)}
+          onPress={() => setAjoutLampes(false)}
           accessibilityLabel="Fermer le sélecteur"
           activeOpacity={1}
         >
           <TouchableOpacity activeOpacity={1} style={styles.feuilleModal}>
-            <Text style={styles.titreModal}>Choisir une lampe</Text>
-            <SelecteurLampe onChoisir={ajouterEtape} />
+            <Text style={styles.titreModal}>Choisir les lampes</Text>
+            <SelecteurLampe onValider={ajouterEtape} />
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Modal : modifier les lampes d'une étape existante */}
+      <Modal
+        visible={indexEditionLampes !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setIndexEditionLampes(null)}
+        accessibilityViewIsModal
+      >
+        <TouchableOpacity
+          style={styles.fondModal}
+          onPress={() => setIndexEditionLampes(null)}
+          accessibilityLabel="Fermer le sélecteur"
+          activeOpacity={1}
+        >
+          <TouchableOpacity activeOpacity={1} style={styles.feuilleModal}>
+            <Text style={styles.titreModal}>Modifier les lampes</Text>
+            {indexEditionLampes !== null && (
+              <SelecteurLampe
+                selectionInitiale={etapes[indexEditionLampes]?.lampes ?? []}
+                onValider={(lampes) =>
+                  modifierLampes(indexEditionLampes, lampes)
+                }
+              />
+            )}
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
@@ -416,6 +476,14 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   pastilleEtape: { width: 20, height: 20, borderRadius: 10, flexShrink: 0 },
+  pastilles: { flexDirection: "row", gap: 4, flexShrink: 0 },
+  zoneLampes: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: espacements.xs,
+    minHeight: tactile.min - 8,
+  },
   nomLampe: { ...typo.corps, flex: 1 },
   btnDuree: {
     backgroundColor: couleurs.surfaceSecondaire,

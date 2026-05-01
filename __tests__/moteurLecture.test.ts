@@ -18,7 +18,7 @@ const { envoyerCommandeAuFeu } = require("../services/feu") as {
 };
 
 function creerProgramme(
-  etapes: Array<{ lampe: Lampe; duree: number }>
+  etapes: Array<{ lampe?: Lampe; lampes?: Lampe[]; duree: number }>
 ): Programme {
   return {
     id: "test",
@@ -27,7 +27,7 @@ function creerProgramme(
     nbLancements: 0,
     etapes: etapes.map((e, i) => ({
       id: `e${i}`,
-      lampe: e.lampe,
+      lampes: e.lampes ?? (e.lampe ? [e.lampe] : ["eteint"]),
       dureeSecondes: e.duree,
     })),
     creeA: 0,
@@ -52,9 +52,18 @@ describe("moteurLecture", () => {
     const onTick = jest.fn();
     lancerProgramme(prog, onTick, jest.fn());
 
-    expect(envoyerCommandeAuFeu).toHaveBeenCalledWith("vert");
+    expect(envoyerCommandeAuFeu).toHaveBeenCalledWith(["vert"]);
     expect(onTick).toHaveBeenCalledWith(0, 0);
     expect(estActif()).toBe(true);
+  });
+
+  test("envoie une combinaison de lampes simultanément", () => {
+    const prog = creerProgramme([
+      { lampes: ["rouge", "orange"], duree: 2 },
+    ]);
+    lancerProgramme(prog, jest.fn(), jest.fn());
+
+    expect(envoyerCommandeAuFeu).toHaveBeenCalledWith(["rouge", "orange"]);
   });
 
   test("avance la progression dans une étape", () => {
@@ -84,7 +93,7 @@ describe("moteurLecture", () => {
       ([i]) => i
     );
     expect(indices).toContain(1);
-    expect(envoyerCommandeAuFeu).toHaveBeenCalledWith("rouge");
+    expect(envoyerCommandeAuFeu).toHaveBeenCalledWith(["rouge"]);
   });
 
   test("boucle : revient à l'étape 0 après la dernière étape", () => {

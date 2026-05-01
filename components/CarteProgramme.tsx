@@ -12,7 +12,7 @@ import {
   couleurs,
   espacements,
   typo,
-  labelLampe,
+  libelleLampes,
   dureeTotaleCycle,
 } from "../theme";
 
@@ -27,7 +27,7 @@ type Props = {
 function resumeCourt(programme: Programme): string {
   if (programme.etapes.length === 0) return "Aucune étape";
   return programme.etapes
-    .map((e) => `${labelLampe[e.lampe]} ${e.dureeSecondes} s`)
+    .map((e) => `${libelleLampes(e.lampes)} ${e.dureeSecondes} s`)
     .join(" · ");
 }
 

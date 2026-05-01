@@ -11,17 +11,21 @@ export function configurerIP(ip: string | null): void {
   _ipFeu = ip;
 }
 
-export async function envoyerCommandeAuFeu(lampe: Lampe): Promise<void> {
+export async function envoyerCommandeAuFeu(
+  lampes: Lampe | Lampe[]
+): Promise<void> {
+  const liste = Array.isArray(lampes) ? lampes : [lampes];
+  const normalisees = liste.length === 0 ? (["eteint"] as Lampe[]) : liste;
   if (MODE === "wifi") {
     if (!_ipFeu) return;
     const res = await fetch(`http://${_ipFeu}/lampe`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ lampe }),
+      body: JSON.stringify({ lampes: normalisees }),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
   } else {
-    console.log(`[feu mock] lampe → ${lampe}`);
+    console.log(`[feu mock] lampes → ${normalisees.join(", ")}`);
   }
 }
 

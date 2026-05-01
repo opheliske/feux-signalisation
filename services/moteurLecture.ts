@@ -1,4 +1,4 @@
-import { Programme } from "../theme";
+import { Lampe, Programme } from "../theme";
 import { envoyerCommandeAuFeu } from "./feu";
 import { surChangementEtape, surArret } from "./stimulation";
 import { useFeuStore } from "../stores/useFeuStore";
@@ -28,17 +28,17 @@ function _sleep(ms: number): Promise<void> {
 }
 
 async function _envoyerAvecRetry(
-  lampe: Parameters<typeof envoyerCommandeAuFeu>[0],
+  lampes: Lampe[],
   tentative = 0
 ): Promise<void> {
   try {
-    await envoyerCommandeAuFeu(lampe);
+    await envoyerCommandeAuFeu(lampes);
     useFeuStore.getState().setConnexionFeu("connecte");
     useFeuStore.getState().setErreur(null);
   } catch {
     if (tentative < MAX_RETRIES) {
       await _sleep(DELAI_RETRY_MS);
-      return _envoyerAvecRetry(lampe, tentative + 1);
+      return _envoyerAvecRetry(lampes, tentative + 1);
     }
     useFeuStore.getState().setConnexionFeu("deconnecte");
     useFeuStore.getState().setErreur(
@@ -66,8 +66,8 @@ export function lancerProgramme(
   };
 
   const reglages = useReglagesStore.getState().reglages;
-  _envoyerAvecRetry(programme.etapes[0].lampe);
-  surChangementEtape(programme.etapes[0].lampe, reglages);
+  _envoyerAvecRetry(programme.etapes[0].lampes);
+  surChangementEtape(programme.etapes[0].lampes, reglages);
   onTick(0, 0);
   _state.intervalle = setInterval(_tick, INTERVALLE_MS);
 }
@@ -94,8 +94,8 @@ function _tick(): void {
     _state.progressionMs = 0;
     const nouvelleEtape = _state.programme.etapes[_state.etapeIndex];
     const reglages = useReglagesStore.getState().reglages;
-    _envoyerAvecRetry(nouvelleEtape.lampe);
-    surChangementEtape(nouvelleEtape.lampe, reglages);
+    _envoyerAvecRetry(nouvelleEtape.lampes);
+    surChangementEtape(nouvelleEtape.lampes, reglages);
     _state.onTick(_state.etapeIndex, 0);
   } else {
     _state.onTick(_state.etapeIndex, _state.progressionMs / dureeTotaleMs);

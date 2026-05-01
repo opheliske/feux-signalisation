@@ -30,7 +30,6 @@ export default function ApercuCycle({ etapes }: Props) {
               styles.segment,
               {
                 flex: etape.dureeSecondes,
-                backgroundColor: couleurPastille(etape.lampe),
                 borderTopLeftRadius: i === 0 ? rayons.carte : 0,
                 borderBottomLeftRadius: i === 0 ? rayons.carte : 0,
                 borderTopRightRadius: i === etapes.length - 1 ? rayons.carte : 0,
@@ -38,7 +37,23 @@ export default function ApercuCycle({ etapes }: Props) {
                   i === etapes.length - 1 ? rayons.carte : 0,
               },
             ]}
-          />
+          >
+            {etape.lampes.map((lampe, j) => (
+              <View
+                key={lampe}
+                style={[
+                  styles.bande,
+                  {
+                    flex: 1,
+                    backgroundColor: couleurPastille(lampe),
+                    borderTopWidth:
+                      j > 0 ? StyleSheet.hairlineWidth : 0,
+                    borderTopColor: "rgba(0,0,0,0.2)",
+                  },
+                ]}
+              />
+            ))}
+          </View>
         ))}
       </View>
       <View style={styles.pied}>
@@ -57,7 +72,8 @@ const styles = StyleSheet.create({
     borderRadius: rayons.carte,
     overflow: "hidden",
   },
-  segment: {},
+  segment: { flexDirection: "column", overflow: "hidden" },
+  bande: {},
   pied: {
     flexDirection: "row",
     justifyContent: "space-between",
