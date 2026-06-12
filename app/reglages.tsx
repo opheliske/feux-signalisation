@@ -1,28 +1,27 @@
-import React from "react";
+import React, { useEffect } from "react";
 import {
   View,
   Text,
   Switch,
   TextInput,
-  TouchableOpacity,
   ScrollView,
   StyleSheet,
 } from "react-native";
-import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import * as Haptics from "expo-haptics";
+import Constants from "expo-constants";
 import { useReglagesStore } from "../stores/useReglagesStore";
 import { useProgrammesStore } from "../stores/useProgrammesStore";
 import { couleurs, rayons, espacements, typo, tactile } from "../theme";
 
 export default function Reglages() {
-  const router = useRouter();
   const { reglages, mettreAJour } = useReglagesStore();
-  const { reinitialiserExemples } = useProgrammesStore();
+  const { chargerVersion, version } = useProgrammesStore();
+  const versionApp = Constants.expoConfig?.version ?? "—";
 
-  const vibrer = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-  };
+  // Récupère la version du firmware quand l'IP est connue / change.
+  useEffect(() => {
+    chargerVersion();
+  }, [reglages.ipFeu, chargerVersion]);
 
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]}>
@@ -43,35 +42,8 @@ export default function Reglages() {
             autoCapitalize="none"
           />
           <Text style={styles.aide}>
-            Laisse vide pour utiliser le mode simulation (test sans feu physique).
+            L'adresse IP du feu sur ton réseau Wi-Fi.
           </Text>
-        </View>
-
-        {/* Planning */}
-        <TouchableOpacity
-          onPress={() => router.push("/planning")}
-          style={styles.rangeeNav}
-          accessibilityLabel="Gérer le planning automatique"
-          accessibilityRole="button"
-        >
-          <Text style={styles.labelRangee}>Planning automatique</Text>
-          <Text style={styles.chevron}>›</Text>
-        </TouchableOpacity>
-
-        {/* Vibrations */}
-        <View style={styles.rangee}>
-          <Text style={styles.labelRangee}>Vibrations quand j'appuie</Text>
-          <Switch
-            value={reglages.vibrations}
-            onValueChange={(v) => {
-              if (v) vibrer();
-              mettreAJour({ vibrations: v });
-            }}
-            thumbColor={couleurs.boutonTexte}
-            trackColor={{ false: couleurs.bordure, true: couleurs.boutonFond }}
-            accessibilityLabel="Activer ou désactiver les vibrations"
-            accessibilityRole="switch"
-          />
         </View>
 
         {/* Animation boule disco */}
@@ -87,56 +59,15 @@ export default function Reglages() {
           />
         </View>
 
-        {/* Sons */}
-        <View style={styles.rangee}>
-          <Text style={styles.labelRangee}>Sons à chaque changement</Text>
-          <Switch
-            value={reglages.sons}
-            onValueChange={(v) => mettreAJour({ sons: v })}
-            thumbColor={couleurs.boutonTexte}
-            trackColor={{ false: couleurs.bordure, true: couleurs.boutonFond }}
-            accessibilityLabel="Activer ou désactiver les sons"
-            accessibilityRole="switch"
-          />
+        {/* Versions */}
+        <View style={styles.versionRangee}>
+          <Text style={styles.versionLabel}>Application</Text>
+          <Text style={styles.versionValeur}>{versionApp}</Text>
         </View>
-
-        {/* Flash LED */}
-        <View style={styles.rangee}>
-          <Text style={styles.labelRangee}>Flash LED à chaque changement</Text>
-          <Switch
-            value={reglages.ledFlash}
-            onValueChange={(v) => mettreAJour({ ledFlash: v })}
-            thumbColor={couleurs.boutonTexte}
-            trackColor={{ false: couleurs.bordure, true: couleurs.boutonFond }}
-            accessibilityLabel="Activer ou désactiver le flash LED"
-            accessibilityRole="switch"
-          />
+        <View style={styles.versionRangee}>
+          <Text style={styles.versionLabel}>Firmware</Text>
+          <Text style={styles.versionValeur}>{version ?? "—"}</Text>
         </View>
-
-        {/* Plein écran auto */}
-        <View style={styles.rangee}>
-          <Text style={styles.labelRangee}>Plein écran au lancement</Text>
-          <Switch
-            value={reglages.pleinEcranAuto}
-            onValueChange={(v) => mettreAJour({ pleinEcranAuto: v })}
-            thumbColor={couleurs.boutonTexte}
-            trackColor={{ false: couleurs.bordure, true: couleurs.boutonFond }}
-            accessibilityLabel="Ouvrir automatiquement le miroir au lancement d'un programme"
-            accessibilityRole="switch"
-          />
-        </View>
-
-        {/* Réinitialiser exemples */}
-        <TouchableOpacity
-          onPress={reinitialiserExemples}
-          style={styles.btnReinit}
-          accessibilityLabel="Remettre les programmes d'exemple"
-          accessibilityRole="button"
-        >
-          <Text style={styles.btnReinitTexte}>
-            Remettre les programmes d'exemple
-          </Text>
-        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -173,7 +104,8 @@ const styles = StyleSheet.create({
     minHeight: tactile.min,
     gap: espacements.sm,
   },
-  rangeeNav: {
+  labelRangee: { ...typo.corps, flex: 1 },
+  versionRangee: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -183,21 +115,8 @@ const styles = StyleSheet.create({
     borderColor: couleurs.bordure,
     padding: espacements.md,
     minHeight: tactile.min,
+    gap: espacements.sm,
   },
-  labelRangee: { ...typo.corps, flex: 1 },
-  chevron: {
-    fontSize: 22,
-    color: couleurs.texteSecondaire,
-    lineHeight: 24,
-  },
-  btnReinit: {
-    borderWidth: 1.5,
-    borderColor: couleurs.boutonFond,
-    borderRadius: rayons.boutonStandard,
-    minHeight: tactile.min,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: espacements.md,
-  },
-  btnReinitTexte: { ...typo.bouton, color: couleurs.boutonFond },
+  versionLabel: { ...typo.corps, flex: 1 },
+  versionValeur: { ...typo.corpsSecondaire, color: couleurs.texteDoux },
 });

@@ -8,14 +8,9 @@ import {
 } from "../services/moteurLecture";
 import { Programme, Lampe } from "../theme";
 
-jest.mock("../services/feu", () => ({
-  envoyerCommandeAuFeu: jest.fn().mockResolvedValue(undefined),
-}));
-
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { envoyerCommandeAuFeu } = require("../services/feu") as {
-  envoyerCommandeAuFeu: jest.Mock;
-};
+// Le moteur est un moteur d'affichage : il ne parle plus au feu (le matériel
+// exécute lui-même la séquence) et notifie l'écran UNIQUEMENT au changement
+// d'étape (pas de progression). On vérifie le minutage, la boucle et la pause.
 
 function creerProgramme(
   etapes: Array<{ lampe?: Lampe; lampes?: Lampe[]; duree: number }>
@@ -39,7 +34,6 @@ describe("moteurLecture", () => {
   beforeEach(() => {
     jest.useFakeTimers();
     arreterMoteur();
-    envoyerCommandeAuFeu.mockClear();
   });
 
   afterEach(() => {
@@ -47,36 +41,23 @@ describe("moteurLecture", () => {
     jest.useRealTimers();
   });
 
-  test("démarre à l'étape 0 et envoie la commande au feu", () => {
+  test("démarre à l'étape 0 et notifie l'aperçu", () => {
     const prog = creerProgramme([{ lampe: "vert", duree: 2 }]);
     const onTick = jest.fn();
     lancerProgramme(prog, onTick, jest.fn());
 
-    expect(envoyerCommandeAuFeu).toHaveBeenCalledWith(["vert"]);
-    expect(onTick).toHaveBeenCalledWith(0, 0);
+    expect(onTick).toHaveBeenCalledWith(0);
     expect(estActif()).toBe(true);
   });
 
-  test("envoie une combinaison de lampes simultanément", () => {
-    const prog = creerProgramme([
-      { lampes: ["rouge", "orange"], duree: 2 },
-    ]);
-    lancerProgramme(prog, jest.fn(), jest.fn());
+  test("ne notifie pas tant que l'étape ne change pas", () => {
+    const prog = creerProgramme([{ lampe: "vert", duree: 5 }]);
+    const onTick = jest.fn();
+    lancerProgramme(prog, onTick, jest.fn());
 
-    expect(envoyerCommandeAuFeu).toHaveBeenCalledWith(["rouge", "orange"]);
-  });
-
-  test("avance la progression dans une étape", () => {
-    const prog = creerProgramme([{ lampe: "vert", duree: 2 }]);
-    const ticks: Array<[number, number]> = [];
-    lancerProgramme(prog, (i, p) => ticks.push([i, p]), jest.fn());
-
-    jest.advanceTimersByTime(1000);
-
-    const dernier = ticks[ticks.length - 1];
-    expect(dernier[0]).toBe(0);
-    expect(dernier[1]).toBeGreaterThan(0);
-    expect(dernier[1]).toBeLessThan(1);
+    onTick.mockClear();
+    jest.advanceTimersByTime(2000); // toujours dans l'étape 0
+    expect(onTick).not.toHaveBeenCalled();
   });
 
   test("passe à l'étape suivante quand la durée est atteinte", () => {
@@ -84,16 +65,12 @@ describe("moteurLecture", () => {
       { lampe: "vert", duree: 1 },
       { lampe: "rouge", duree: 1 },
     ]);
-    const onTick = jest.fn();
-    lancerProgramme(prog, onTick, jest.fn());
+    const indices: number[] = [];
+    lancerProgramme(prog, (i) => indices.push(i), jest.fn());
 
     jest.advanceTimersByTime(1100);
 
-    const indices = (onTick.mock.calls as Array<[number, number]>).map(
-      ([i]) => i
-    );
     expect(indices).toContain(1);
-    expect(envoyerCommandeAuFeu).toHaveBeenCalledWith(["rouge"]);
   });
 
   test("boucle : revient à l'étape 0 après la dernière étape", () => {
@@ -110,35 +87,38 @@ describe("moteurLecture", () => {
     expect(passages0.length).toBeGreaterThan(1);
   });
 
-  test("pause gèle la progression", () => {
-    const prog = creerProgramme([{ lampe: "vert", duree: 5 }]);
-    const progressions: number[] = [];
-    lancerProgramme(prog, (_, p) => progressions.push(p), jest.fn());
+  test("pause gèle l'avancement des étapes", () => {
+    const prog = creerProgramme([
+      { lampe: "vert", duree: 1 },
+      { lampe: "rouge", duree: 1 },
+    ]);
+    const indices: number[] = [];
+    lancerProgramme(prog, (i) => indices.push(i), jest.fn());
 
-    jest.advanceTimersByTime(500);
+    jest.advanceTimersByTime(500); // milieu de l'étape 0
     pauseMoteur();
     expect(estEnPause()).toBe(true);
 
-    const snapshot = progressions[progressions.length - 1];
-    jest.advanceTimersByTime(2000);
-
-    expect(progressions[progressions.length - 1]).toBe(snapshot);
+    jest.advanceTimersByTime(3000); // aurait dû changer d'étape sans la pause
+    expect(indices).not.toContain(1);
   });
 
   test("reprendre après pause continue l'avancement", () => {
-    const prog = creerProgramme([{ lampe: "vert", duree: 5 }]);
-    const progressions: number[] = [];
-    lancerProgramme(prog, (_, p) => progressions.push(p), jest.fn());
+    const prog = creerProgramme([
+      { lampe: "vert", duree: 1 },
+      { lampe: "rouge", duree: 1 },
+    ]);
+    const indices: number[] = [];
+    lancerProgramme(prog, (i) => indices.push(i), jest.fn());
 
     jest.advanceTimersByTime(500);
     pauseMoteur();
-    const avant = progressions[progressions.length - 1];
+    jest.advanceTimersByTime(2000);
+    expect(indices).not.toContain(1);
 
-    jest.advanceTimersByTime(1000);
     reprendreMoteur();
-    jest.advanceTimersByTime(500);
-
-    expect(progressions[progressions.length - 1]).toBeGreaterThan(avant);
+    jest.advanceTimersByTime(600); // 500ms déjà écoulées → franchit la seconde
+    expect(indices).toContain(1);
   });
 
   test("arrêt : désactive le moteur et remet estActif à false", () => {
@@ -153,14 +133,16 @@ describe("moteurLecture", () => {
   });
 
   test("arrêt : le timer ne continue pas après arrêt", () => {
-    const prog = creerProgramme([{ lampe: "vert", duree: 1 }]);
+    const prog = creerProgramme([
+      { lampe: "vert", duree: 1 },
+      { lampe: "rouge", duree: 1 },
+    ]);
     const onTick = jest.fn();
     lancerProgramme(prog, onTick, jest.fn());
 
-    jest.advanceTimersByTime(200);
-    const nbAppelsAvant = onTick.mock.calls.length;
     arreterMoteur();
-    jest.advanceTimersByTime(500);
+    const nbAppelsAvant = onTick.mock.calls.length;
+    jest.advanceTimersByTime(3000);
 
     expect(onTick.mock.calls.length).toBe(nbAppelsAvant);
   });
@@ -170,6 +152,5 @@ describe("moteurLecture", () => {
     lancerProgramme(prog, jest.fn(), jest.fn());
 
     expect(estActif()).toBe(false);
-    expect(envoyerCommandeAuFeu).not.toHaveBeenCalled();
   });
 });

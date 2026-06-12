@@ -141,17 +141,20 @@ const LogoBouleDisco = forwardRef<LogoBouleDisco, Props>(
     const twinkleLoopB = useRef<Animated.CompositeAnimation | null>(null);
     const beamLoop = useRef<Animated.CompositeAnimation | null>(null);
 
-    // Rotation de la sphère
+    // Rotation de la sphère.
+    // On ne dépend QUE de la présence d'une lampe active (vitesse de rotation),
+    // pas de sa couleur : ainsi un changement de couleur ne réinitialise pas la
+    // position de la boule. La teinte est appliquée directement au rendu.
+    const aLampeActive = lampeActive != null;
     useEffect(() => {
       animLoop.current?.stop();
       if (!anime) {
         rotation.setValue(0);
         return;
       }
-      const duree =
-        lampeActive != null
-          ? animation.rotationBouleProgramme
-          : animation.rotationBouleDisco;
+      const duree = aLampeActive
+        ? animation.rotationBouleProgramme
+        : animation.rotationBouleDisco;
       rotation.setValue(0);
       animLoop.current = Animated.loop(
         Animated.timing(rotation, {
@@ -163,7 +166,7 @@ const LogoBouleDisco = forwardRef<LogoBouleDisco, Props>(
       );
       animLoop.current.start();
       return () => animLoop.current?.stop();
-    }, [anime, lampeActive, rotation]);
+    }, [anime, aLampeActive, rotation]);
 
     // Scintillement et pulsations des rayons
     useEffect(() => {

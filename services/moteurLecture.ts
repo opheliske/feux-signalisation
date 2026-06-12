@@ -1,14 +1,17 @@
-import { Lampe, Programme } from "../theme";
-import { envoyerCommandeAuFeu } from "./feu";
+import { Programme } from "../theme";
 import { surChangementEtape, surArret } from "./stimulation";
 import { useFeuStore } from "../stores/useFeuStore";
 import { useReglagesStore } from "../stores/useReglagesStore";
 
-const INTERVALLE_MS = 100;
-const MAX_RETRIES = 2;
-const DELAI_RETRY_MS = 500;
+// Moteur d'affichage uniquement : le feu exécute lui-même la séquence du mode
+// actif (commande `set`). Ce moteur ne fait QUE suivre l'étape en cours pour
+// piloter la couleur de la boule disco / le miroir et les retours locaux. Il
+// notifie l'écran UNIQUEMENT au changement d'étape (pas de progression : aucune
+// barre de progression n'existe, et un re-render à 100 ms ralentit l'app).
 
-type OnTick = (etapeIndex: number, progression: number) => void;
+const INTERVALLE_MS = 100;
+
+type OnTick = (etapeIndex: number) => void;
 type OnStop = () => void;
 
 type MoteurState = {
@@ -22,30 +25,6 @@ type MoteurState = {
 };
 
 let _state: MoteurState | null = null;
-
-function _sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
-}
-
-async function _envoyerAvecRetry(
-  lampes: Lampe[],
-  tentative = 0
-): Promise<void> {
-  try {
-    await envoyerCommandeAuFeu(lampes);
-    useFeuStore.getState().setConnexionFeu("connecte");
-    useFeuStore.getState().setErreur(null);
-  } catch {
-    if (tentative < MAX_RETRIES) {
-      await _sleep(DELAI_RETRY_MS);
-      return _envoyerAvecRetry(lampes, tentative + 1);
-    }
-    useFeuStore.getState().setConnexionFeu("deconnecte");
-    useFeuStore.getState().setErreur(
-      "Je n'arrive pas à parler au feu. Veux-tu réessayer ?"
-    );
-  }
-}
 
 export function lancerProgramme(
   programme: Programme,
@@ -66,9 +45,8 @@ export function lancerProgramme(
   };
 
   const reglages = useReglagesStore.getState().reglages;
-  _envoyerAvecRetry(programme.etapes[0].lampes);
   surChangementEtape(programme.etapes[0].lampes, reglages);
-  onTick(0, 0);
+  onTick(0);
   _state.intervalle = setInterval(_tick, INTERVALLE_MS);
 }
 
@@ -88,17 +66,15 @@ function _tick(): void {
   const etape = _state.programme.etapes[_state.etapeIndex];
   const dureeTotaleMs = etape.dureeSecondes * 1000;
 
+  // On ne notifie qu'au passage d'une étape à la suivante.
   if (_state.progressionMs >= dureeTotaleMs) {
     _state.etapeIndex =
       (_state.etapeIndex + 1) % _state.programme.etapes.length;
     _state.progressionMs = 0;
     const nouvelleEtape = _state.programme.etapes[_state.etapeIndex];
     const reglages = useReglagesStore.getState().reglages;
-    _envoyerAvecRetry(nouvelleEtape.lampes);
     surChangementEtape(nouvelleEtape.lampes, reglages);
-    _state.onTick(_state.etapeIndex, 0);
-  } else {
-    _state.onTick(_state.etapeIndex, _state.progressionMs / dureeTotaleMs);
+    _state.onTick(_state.etapeIndex);
   }
 }
 

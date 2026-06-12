@@ -14,6 +14,7 @@ export type Programme = {
   etapes: Etape[];
   epingle: boolean;
   nbLancements: number;
+  derniereExecution?: number; // rang de récence (croissant), 0 si jamais lancé
   creeA: number;
   modifieA: number;
 };
@@ -22,20 +23,11 @@ export type EtatFeu = {
   allume: boolean;
   programmeEnCours: string | null;
   etapeIndex: number;
-  progression: number; // 0..1
   enPause: boolean;
   connexionFeu: "connecte" | "deconnecte" | "inconnu";
   dernierProgrammeLanceId: string | null;
   finMinuterie: number | null; // timestamp ms
   erreur: string | null;
-};
-
-export type DeclencheurPlanifie = {
-  id: string;
-  programmeId: string;
-  heure: string; // "08:00"
-  jours: Array<"lun" | "mar" | "mer" | "jeu" | "ven" | "sam" | "dim">;
-  actif: boolean;
 };
 
 export type Reglages = {
@@ -107,10 +99,23 @@ export function libelleLampes(lampes: Lampe[]): string {
   return lampes.map((l) => labelLampe[l]).join(" + ");
 }
 
+// Affiche une durée (en secondes, éventuellement fractionnaire) en s ou min.
+// Les durées viennent du feu en millisecondes ; on les montre en secondes
+// (ex : 0.5 s) ou en minutes au-delà de 60 s (ex : 1 min 30 s).
+export function formatDuree(secondes: number): string {
+  if (secondes >= 60) {
+    const min = Math.floor(secondes / 60);
+    const s = Math.round(secondes % 60);
+    return s === 0 ? `${min} min` : `${min} min ${s} s`;
+  }
+  const arrondi = Math.round(secondes * 10) / 10;
+  return `${arrondi} s`;
+}
+
 export function resumeProgramme(etapes: Etape[]): string {
   if (etapes.length === 0) return "Aucune étape";
   return etapes
-    .map((e) => `${libelleLampes(e.lampes)} ${e.dureeSecondes} s`)
+    .map((e) => `${libelleLampes(e.lampes)} ${formatDuree(e.dureeSecondes)}`)
     .join(", puis ");
 }
 

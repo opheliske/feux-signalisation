@@ -1,155 +1,193 @@
 import { create } from "zustand";
-import { persist, createJSONStorage } from "zustand/middleware";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Etape, Lampe, Programme } from "../theme";
+import { Programme } from "../theme";
+import {
+  ModeAppareil,
+  encoderUtf8,
+  MAX_NAME_LEN,
+} from "../services/protocol";
+import {
+  addMode,
+  deleteMode,
+  editMode,
+  getModeActif,
+  getModes,
+  getVersion,
+  setMode,
+  MODE_OFF,
+} from "../services/feu";
 
-function genId(): string {
-  return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+// Compteurs de lancements, locaux et éphémères (le firmware ne les stocke pas).
+// Conservés entre deux rafraîchissements, indexés par nom de mode.
+const _lancements = new Map<string, number>();
+// Rang de récence : à chaque lancement on attribue un numéro croissant, ce qui
+// permet de trier du plus récemment lancé au plus ancien.
+const _derniereExecution = new Map<string, number>();
+let _rangExecution = 0;
+
+function versProgramme(m: ModeAppareil): Programme {
+  return {
+    id: m.name,
+    nom: m.name,
+    etapes: m.etapes,
+    epingle: false,
+    nbLancements: _lancements.get(m.name) ?? 0,
+    derniereExecution: _derniereExecution.get(m.name) ?? 0,
+    creeA: 0,
+    modifieA: 0,
+  };
 }
 
-const programmesExemple: Programme[] = [
-  {
-    id: "exemple-1",
-    nom: "Vert qui reste",
-    etapes: [{ id: "e1-1", lampes: ["vert"], dureeSecondes: 5 }],
-    epingle: false,
-    nbLancements: 0,
-    creeA: 1700000000000,
-    modifieA: 1700000000000,
-  },
-  {
-    id: "exemple-2",
-    nom: "Vert puis Orange",
-    etapes: [
-      { id: "e2-1", lampes: ["vert"], dureeSecondes: 3 },
-      { id: "e2-2", lampes: ["orange"], dureeSecondes: 2 },
-    ],
-    epingle: false,
-    nbLancements: 0,
-    creeA: 1700000000000,
-    modifieA: 1700000000000,
-  },
-  {
-    id: "exemple-3",
-    nom: "Orange qui clignote",
-    etapes: [
-      { id: "e3-1", lampes: ["orange"], dureeSecondes: 1 },
-      { id: "e3-2", lampes: ["eteint"], dureeSecondes: 1 },
-    ],
-    epingle: false,
-    nbLancements: 0,
-    creeA: 1700000000000,
-    modifieA: 1700000000000,
-  },
-  {
-    id: "exemple-4",
-    nom: "Rouge + Orange ensemble",
-    etapes: [
-      { id: "e4-1", lampes: ["rouge", "orange"], dureeSecondes: 3 },
-      { id: "e4-2", lampes: ["vert"], dureeSecondes: 3 },
-    ],
-    epingle: false,
-    nbLancements: 0,
-    creeA: 1700000000000,
-    modifieA: 1700000000000,
-  },
-];
+function nbOctets(s: string): number {
+  return encoderUtf8(s).length;
+}
+
+// Construit un nom de copie unique qui tient dans MAX_NAME_LEN octets.
+function nomCopie(base: string, existants: Set<string>): string {
+  for (let i = 2; i < 1000; i++) {
+    const suffixe = `_${i}`;
+    let racine = base;
+    // Réduit la racine jusqu'à ce que racine+suffixe tienne dans la limite.
+    while (nbOctets(racine + suffixe) > MAX_NAME_LEN && racine.length > 0) {
+      racine = racine.slice(0, -1);
+    }
+    const candidat = racine + suffixe;
+    if (!existants.has(candidat)) return candidat;
+  }
+  return base.slice(0, MAX_NAME_LEN);
+}
 
 type ProgrammesStore = {
   programmes: Programme[];
-  creer: (programme: Programme) => void;
-  mettreAJour: (
-    id: string,
-    updates: Partial<Omit<Programme, "id" | "creeA">>
-  ) => void;
-  supprimer: (id: string) => void;
-  dupliquer: (id: string) => void;
-  incrementerLancements: (id: string) => void;
-  reinitialiserExemples: () => void;
+  chargement: boolean;
+  erreur: string | null;
+  version: string | null;
+  modeActif: string | null;
+
+  charger: () => Promise<void>;
+  chargerVersion: () => Promise<void>;
+  chargerModeActif: () => Promise<void>;
+  setModeActif: (nom: string | null) => void;
+  lancer: (nom: string) => Promise<void>;
+  creer: (mode: ModeAppareil) => Promise<void>;
+  mettreAJour: (ancienNom: string, mode: ModeAppareil) => Promise<void>;
+  supprimer: (nom: string) => Promise<void>;
+  dupliquer: (nom: string) => Promise<void>;
+  incrementerLancements: (nom: string) => void;
 };
 
-function migrerEtape(e: unknown): Etape {
-  const etape = e as Record<string, unknown>;
-  // v1 (lampe: Lampe) → v2 (lampes: Lampe[])
-  let lampes: Lampe[];
-  if (Array.isArray(etape.lampes)) {
-    lampes = etape.lampes as Lampe[];
-  } else if (typeof etape.lampe === "string") {
-    lampes = [etape.lampe as Lampe];
-  } else {
-    lampes = ["eteint"];
-  }
-  return {
-    id: etape.id as string,
-    lampes,
-    dureeSecondes: etape.dureeSecondes as number,
-  };
+function messageErreur(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  return "Je n'arrive pas à parler au feu.";
 }
 
-function migrerProgramme(p: unknown): Programme {
-  const prog = p as Record<string, unknown>;
-  const etapesBrutes = (prog.etapes as unknown[]) ?? [];
-  return {
-    id: prog.id as string,
-    nom: prog.nom as string,
-    etapes: etapesBrutes.map(migrerEtape),
-    epingle: (prog.epingle as boolean) ?? false,
-    nbLancements: (prog.nbLancements as number) ?? 0,
-    creeA: prog.creeA as number,
-    modifieA: prog.modifieA as number,
-  };
-}
+export const useProgrammesStore = create<ProgrammesStore>()((set, get) => ({
+  programmes: [],
+  chargement: false,
+  erreur: null,
+  version: null,
+  modeActif: null,
 
-export const useProgrammesStore = create<ProgrammesStore>()(
-  persist(
-    (set, get) => ({
-      programmes: programmesExemple,
-      creer: (programme) =>
-        set((s) => ({ programmes: [...s.programmes, programme] })),
-      mettreAJour: (id, updates) =>
-        set((s) => ({
-          programmes: s.programmes.map((p) =>
-            p.id === id ? { ...p, ...updates, modifieA: Date.now() } : p
-          ),
-        })),
-      supprimer: (id) =>
-        set((s) => ({
-          programmes: s.programmes.filter((p) => p.id !== id),
-        })),
-      dupliquer: (id) => {
-        const source = get().programmes.find((p) => p.id === id);
-        if (!source) return;
-        const copie: Programme = {
-          ...source,
-          id: genId(),
-          nom: `Copie de ${source.nom}`,
-          epingle: false,
-          nbLancements: 0,
-          creeA: Date.now(),
-          modifieA: Date.now(),
-          etapes: source.etapes.map((e) => ({ ...e, id: genId() })),
-        };
-        set((s) => ({ programmes: [...s.programmes, copie] }));
-      },
-      incrementerLancements: (id) =>
-        set((s) => ({
-          programmes: s.programmes.map((p) =>
-            p.id === id ? { ...p, nbLancements: p.nbLancements + 1 } : p
-          ),
-        })),
-      reinitialiserExemples: () => set({ programmes: programmesExemple }),
-    }),
-    {
-      name: "programmes_benoit",
-      storage: createJSONStorage(() => AsyncStorage),
-      version: 2,
-      migrate: (persistedState: unknown) => {
-        const state = persistedState as { programmes?: unknown[] };
-        if (Array.isArray(state.programmes)) {
-          state.programmes = state.programmes.map(migrerProgramme);
-        }
-        return state as { programmes: Programme[] };
-      },
+  charger: async () => {
+    set({ chargement: true, erreur: null });
+    try {
+      const modes = await getModes();
+      // Le mode OFF est un mode technique (stop) : on ne l'affiche pas.
+      set({
+        programmes: modes
+          .filter((m) => m.name !== MODE_OFF)
+          .map(versProgramme),
+        chargement: false,
+      });
+      await get().chargerModeActif();
+    } catch (e) {
+      set({ chargement: false, erreur: messageErreur(e) });
     }
-  )
-);
+  },
+
+  chargerVersion: async () => {
+    try {
+      const v = await getVersion();
+      set({ version: v });
+    } catch {
+      set({ version: null });
+    }
+  },
+
+  chargerModeActif: async () => {
+    try {
+      set({ modeActif: await getModeActif() });
+    } catch {
+      set({ modeActif: null });
+    }
+  },
+
+  setModeActif: (nom) => set({ modeActif: nom }),
+
+  lancer: async (nom) => {
+    try {
+      await setMode(nom);
+      set({ erreur: null, modeActif: nom });
+    } catch (e) {
+      set({ erreur: messageErreur(e) });
+    }
+  },
+
+  creer: async (mode) => {
+    await addMode(mode);
+    await get().charger();
+  },
+
+  mettreAJour: async (ancienNom, mode) => {
+    if (mode.name === ancienNom) {
+      await editMode(mode);
+    } else {
+      // Le firmware identifie un mode par son nom : un renommage = supprimer + ajouter.
+      await addMode(mode);
+      await deleteMode(ancienNom);
+    }
+    await get().charger();
+  },
+
+  supprimer: async (nom) => {
+    try {
+      await deleteMode(nom);
+      _lancements.delete(nom);
+      await get().charger();
+    } catch (e) {
+      set({ erreur: messageErreur(e) });
+    }
+  },
+
+  dupliquer: async (nom) => {
+    const source = get().programmes.find((p) => p.nom === nom);
+    if (!source) return;
+    const existants = new Set(get().programmes.map((p) => p.nom));
+    const copie: ModeAppareil = {
+      name: nomCopie(source.nom, existants),
+      loop: true,
+      etapes: source.etapes.map((e) => ({ ...e })),
+    };
+    try {
+      await addMode(copie);
+      await get().charger();
+    } catch (e) {
+      set({ erreur: messageErreur(e) });
+    }
+  },
+
+  incrementerLancements: (nom) => {
+    _lancements.set(nom, (_lancements.get(nom) ?? 0) + 1);
+    _derniereExecution.set(nom, ++_rangExecution);
+    set((s) => ({
+      programmes: s.programmes.map((p) =>
+        p.nom === nom
+          ? {
+              ...p,
+              nbLancements: _lancements.get(nom) ?? 0,
+              derniereExecution: _derniereExecution.get(nom) ?? 0,
+            }
+          : p
+      ),
+    }));
+  },
+}));

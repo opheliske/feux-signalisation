@@ -5,30 +5,23 @@ import {
   TouchableOpacity,
   ScrollView,
   StyleSheet,
-  Platform,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
-import Svg, { Rect, Circle, Polygon, Path } from "react-native-svg";
+import Svg, { Path, Rect } from "react-native-svg";
 import LogoBouleDisco from "../components/LogoBouleDisco";
 import type { LogoBouleDisco as LogoRef } from "../components/LogoBouleDisco";
-import BlocEnLecture from "../components/BlocEnLecture";
 import CarteProgramme from "../components/CarteProgramme";
 import PastilleConnexion from "../components/PastilleConnexion";
 import FondRayons from "../components/FondRayons";
-import EtatVideProgramme from "../components/EtatVideProgramme";
 import { useProgrammesStore } from "../stores/useProgrammesStore";
 import { useFeuStore } from "../stores/useFeuStore";
 import { useReglagesStore } from "../stores/useReglagesStore";
-import { couleurs, espacements, rayons, typo, tactile } from "../theme";
-import { allumerFeu, eteindreFeu, configurerIP } from "../services/feu";
-import {
-  lancerProgramme,
-  arreterMoteur,
-  pauseMoteur,
-  reprendreMoteur,
-} from "../services/moteurLecture";
+import { useFavorisStore } from "../stores/useFavorisStore";
+import { Programme, couleurs, espacements, rayons, typo, tactile } from "../theme";
+import { allumerFeu, configurerIP, MODE_OFF } from "../services/feu";
+import { lancerProgramme, arreterMoteur, estActif } from "../services/moteurLecture";
 
 function IconeEngrenage() {
   return (
@@ -49,21 +42,30 @@ function IconeEngrenage() {
   );
 }
 
-function PictogramFeu() {
+function IconeStop() {
   return (
-    <Svg width={18} height={22} viewBox="0 0 18 22">
-      <Rect x={2} y={2} width={14} height={18} rx={4} fill="#1F1400" />
-      <Circle cx={9} cy={6.5} r={2.2} fill="#E24B4A" />
-      <Circle cx={9} cy={11} r={2.2} fill="#FF9500" />
-      <Circle cx={9} cy={15.5} r={2.2} fill="#7ACB2B" />
+    <Svg width={16} height={16} viewBox="0 0 16 16">
+      <Rect x={3} y={3} width={10} height={10} rx={2} fill={couleurs.stopTexte} />
     </Svg>
   );
 }
 
-function PlayIcon() {
+function IconeRafraichir() {
   return (
-    <Svg width={14} height={14} viewBox="0 0 14 14">
-      <Polygon points="4,3 13,7 4,11" fill="#FFD60A" />
+    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M21 12a9 9 0 1 1-2.64-6.36"
+        stroke="#1F1400"
+        strokeWidth={2}
+        strokeLinecap="round"
+      />
+      <Path
+        d="M21 3v6h-6"
+        stroke="#1F1400"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </Svg>
   );
 }
@@ -72,83 +74,116 @@ export default function Accueil() {
   const router = useRouter();
   const bouleDisco = useRef<LogoRef>(null);
 
-  const { programmes, supprimer, dupliquer, incrementerLancements } =
-    useProgrammesStore();
+  const {
+    programmes,
+    supprimer,
+    dupliquer,
+    incrementerLancements,
+    charger,
+    lancer,
+    chargement,
+    erreur: erreurModes,
+    modeActif,
+  } = useProgrammesStore();
   const {
     etat,
     setAllume,
     setProgrammeEnCours,
     setEtapeIndex,
-    setProgression,
     setEnPause,
     setDernierProgrammeLanceId,
     reset,
   } = useFeuStore();
   const { reglages } = useReglagesStore();
+  const favoris = useFavorisStore((s) => s.favoris);
 
   useEffect(() => {
     configurerIP(reglages.ipFeu);
   }, [reglages.ipFeu]);
+
+  // Recharge la liste des modes depuis le feu à chaque fois que l'écran reprend
+  // le focus (retour depuis l'éditeur, les réglages…) ou quand l'IP change.
+  useFocusEffect(
+    React.useCallback(() => {
+      configurerIP(reglages.ipFeu);
+      charger();
+    }, [reglages.ipFeu, charger])
+  );
+
+  // Synchronise l'affichage (boule disco, miroir, bloc en lecture) avec le mode
+  // réellement actif sur le feu — y compris quand il change tout seul via le
+  // bouton physique, détecté par le heartbeat. On adopte le mode rapporté sans
+  // le renvoyer au feu ni compter un lancement.
+  useEffect(() => {
+    // Aucun mode actif (ou mode OFF) → on arrête l'aperçu local.
+    if (!modeActif || modeActif === MODE_OFF) {
+      if (estActif()) {
+        arreterMoteur();
+        reset();
+      }
+      return;
+    }
+    const prog = programmes.find((p) => p.nom === modeActif);
+    if (!prog || prog.etapes.length === 0) return;
+    if (etat.programmeEnCours === prog.id) return; // déjà affiché
+    setProgrammeEnCours(prog.id);
+    setEnPause(false);
+    lancerProgramme(
+      prog,
+      // Aperçu : on ne met à jour le store qu'au changement d'étape (pour la
+      // couleur de la boule disco / le miroir). La progression n'est plus
+      // affichée, donc on évite un re-render de tout l'écran toutes les 100 ms
+      // — sinon les rendus s'accumulent et l'app ralentit progressivement.
+      (etapeIndex) => {
+        const feu = useFeuStore.getState();
+        if (feu.etat.etapeIndex !== etapeIndex) feu.setEtapeIndex(etapeIndex);
+      },
+      () => reset()
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modeActif, programmes]);
 
   const vibrer = () => {
     if (reglages.vibrations)
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
   };
 
-  const handleAllumer = () => {
-    vibrer();
-    setAllume(true);
-    allumerFeu().catch(() => {});
-  };
-
-  const handleEteindre = () => {
-    vibrer();
-    arreterMoteur();
-    reset();
-    eteindreFeu().catch(() => {});
-  };
-
   const handleLancer = (id: string) => {
     vibrer();
     const prog = programmes.find((p) => p.id === id);
     if (!prog || prog.etapes.length === 0) return;
+    // Active le mode sur le feu (le matériel exécute lui-même la séquence).
+    lancer(prog.nom);
     if (!etat.allume) {
       setAllume(true);
       allumerFeu().catch(() => {});
     }
     setProgrammeEnCours(id);
     setEtapeIndex(0);
-    setProgression(0);
     setEnPause(false);
     setDernierProgrammeLanceId(id);
     incrementerLancements(id);
     bouleDisco.current?.exploser();
     lancerProgramme(
       prog,
-      (etapeIndex, progression) => {
-        setEtapeIndex(etapeIndex);
-        setProgression(progression);
+      // Aperçu : on ne met à jour le store qu'au changement d'étape (pour la
+      // couleur de la boule disco / le miroir). La progression n'est plus
+      // affichée, donc on évite un re-render de tout l'écran toutes les 100 ms
+      // — sinon les rendus s'accumulent et l'app ralentit progressivement.
+      (etapeIndex) => {
+        const feu = useFeuStore.getState();
+        if (feu.etat.etapeIndex !== etapeIndex) feu.setEtapeIndex(etapeIndex);
       },
       () => reset()
     );
     if (reglages.pleinEcranAuto) router.push("/miroir");
   };
 
-  const handlePause = () => {
+  // Arrêt : on lance le mode OFF sur le feu. L'effet d'adoption ci-dessus
+  // détectera le changement de mode actif et stoppera l'aperçu local.
+  const handleArreter = () => {
     vibrer();
-    if (etat.enPause) {
-      reprendreMoteur();
-      setEnPause(false);
-    } else {
-      pauseMoteur();
-      setEnPause(true);
-    }
-  };
-
-  const handleStop = () => {
-    vibrer();
-    arreterMoteur();
-    reset();
+    lancer(MODE_OFF);
   };
 
   const progEnCours = etat.programmeEnCours
@@ -159,19 +194,26 @@ export default function Accueil() {
     ? (progEnCours.etapes[etat.etapeIndex] ?? null)
     : null;
 
-  const dernierProg =
-    !etat.programmeEnCours && etat.dernierProgrammeLanceId
-      ? (programmes.find((p) => p.id === etat.dernierProgrammeLanceId) ?? null)
-      : null;
+  // Favoris : les programmes marqués d'une étoile.
+  const favorisProgs = programmes.filter((p) => favoris.includes(p.nom));
 
-  const programmesAffiches = [...programmes].sort(
-    (a, b) => b.nbLancements - a.nbLancements
-  );
-  const favorisIds = new Set(
-    programmesAffiches
-      .filter((p) => p.nbLancements > 0)
-      .slice(0, 2)
-      .map((p) => p.id)
+  // Récents : les 3 derniers programmes lancés depuis l'app (rang de récence).
+  const recentsProgs = [...programmes]
+    .filter((p) => (p.derniereExecution ?? 0) > 0)
+    .sort((a, b) => (b.derniereExecution ?? 0) - (a.derniereExecution ?? 0))
+    .slice(0, 3);
+
+  const renderCarte = (p: Programme) => (
+    <CarteProgramme
+      key={p.id}
+      programme={{ ...p, epingle: favoris.includes(p.nom) }}
+      actif={modeActif === p.nom && modeActif !== MODE_OFF}
+      onLancer={() => handleLancer(p.id)}
+      onArreter={handleArreter}
+      onOuvrir={() => router.push(`/programme/${p.id}`)}
+      onDupliquer={() => dupliquer(p.id)}
+      onSupprimer={() => supprimer(p.id)}
+    />
   );
 
   return (
@@ -229,122 +271,88 @@ export default function Accueil() {
           </View>
         )}
 
-        {/* ── Section Le feu ───────────────────────────── */}
-        <View style={styles.section}>
-          <View style={styles.titreSectionRow}>
-            <PictogramFeu />
-            <Text style={styles.titreSection}>Le feu</Text>
-          </View>
-          <View style={styles.boutonsFeu}>
-            {/* Allumer */}
+        {/* ── Mode actuel (rapporté par le feu) ───────── */}
+        <View style={styles.modeActuel}>
+          <Text style={styles.modeActuelLabel}>Mode actuel</Text>
+          <Text style={styles.modeActuelNom} numberOfLines={1}>
+            {modeActif ?? "Aucun"}
+          </Text>
+          {modeActif && modeActif !== MODE_OFF && (
             <TouchableOpacity
-              onPress={handleAllumer}
-              style={[
-                styles.btnFeu,
-                etat.allume ? styles.btnFeuAllumerActif : styles.btnFeuAllumerInactif,
-              ]}
-              accessibilityLabel="Allumer le feu"
+              onPress={handleArreter}
+              style={styles.btnStopTile}
+              accessibilityLabel="Arrêter le mode (éteindre le feu)"
               accessibilityRole="button"
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <View style={styles.btnFeuInner}>
-                <View
-                  style={[
-                    styles.dotVert,
-                    Platform.OS === "ios" && etat.allume && {
-                      shadowColor: "#7ACB2B",
-                      shadowRadius: 6,
-                      shadowOpacity: 1,
-                      shadowOffset: { width: 0, height: 0 },
-                    },
-                  ]}
-                />
-                <Text
-                  style={[
-                    styles.btnFeuTexte,
-                    etat.allume ? styles.txtFeuActif : styles.txtFeuInactif,
-                  ]}
-                >
-                  Allumer
-                </Text>
-              </View>
+              <IconeStop />
             </TouchableOpacity>
-
-            {/* Éteindre */}
-            <TouchableOpacity
-              onPress={handleEteindre}
-              style={[
-                styles.btnFeu,
-                !etat.allume ? styles.btnFeuEteindreActif : styles.btnFeuEteindreInactif,
-              ]}
-              accessibilityLabel="Éteindre le feu"
-              accessibilityRole="button"
-            >
-              <Text
-                style={[
-                  styles.btnFeuTexte,
-                  !etat.allume ? styles.txtEteindreActif : styles.txtEteindreInactif,
-                ]}
-              >
-                Éteindre
-              </Text>
-            </TouchableOpacity>
-          </View>
+          )}
         </View>
 
-        {/* ── Bloc programme en cours / état vide ─────── */}
-        {etat.programmeEnCours !== null ? (
-          <BlocEnLecture
-            etat={etat}
-            programme={progEnCours}
-            onPause={handlePause}
-            onStop={handleStop}
-          />
-        ) : (
-          <EtatVideProgramme />
+        {/* ── Favoris (uniquement s'il y en a) ─────────── */}
+        {favorisProgs.length > 0 && (
+          <>
+            <Text style={styles.titreProgrammes}>Favoris</Text>
+            <View style={styles.listeProgrammes}>
+              {favorisProgs.map(renderCarte)}
+            </View>
+          </>
         )}
 
-        {/* ── Relancer dernier programme ───────────────── */}
-        {dernierProg && (
-          <TouchableOpacity
-            onPress={() => handleLancer(dernierProg.id)}
-            style={styles.btnRelancer}
-            accessibilityLabel={`Relancer ${dernierProg.nom}`}
-            accessibilityRole="button"
-          >
-            <View style={styles.relancerPlay}>
-              <PlayIcon />
+        {/* ── Récents (3 max, par dernier lancement) ───── */}
+        {recentsProgs.length > 0 && (
+          <>
+            <Text style={styles.titreProgrammes}>Récents</Text>
+            <View style={styles.listeProgrammes}>
+              {recentsProgs.map(renderCarte)}
             </View>
-            <View style={styles.relancerTextes}>
-              <Text style={styles.relancerSurtitre}>RELANCER</Text>
-              <Text style={styles.relancerNom} numberOfLines={1}>
-                {dernierProg.nom}
-              </Text>
-            </View>
-            <Text style={styles.relancerChevron}>›</Text>
-          </TouchableOpacity>
+          </>
         )}
 
-        {/* ── Mes programmes ───────────────────────────── */}
+        {/* ── Tous les programmes ──────────────────────── */}
         <View style={styles.titreProgrammesRow}>
-          <Text style={styles.titreProgrammes}>Mes programmes</Text>
+          <Text style={styles.titreProgrammes}>Tous les programmes</Text>
+          <TouchableOpacity
+            onPress={() => {
+              vibrer();
+              charger();
+            }}
+            disabled={chargement}
+            style={[styles.btnRafraichir, chargement && styles.btnRafraichirActif]}
+            accessibilityLabel="Rafraîchir les modes depuis le feu"
+            accessibilityRole="button"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <IconeRafraichir />
+          </TouchableOpacity>
           <View style={styles.separateurDeg} />
           <Text style={styles.compteurProgrammes}>{programmes.length}</Text>
         </View>
 
         <View style={styles.listeProgrammes}>
-          {programmes.length === 0 ? (
-            <Text style={styles.vide}>Aucun programme. Crée-en un ci-dessous.</Text>
+          {erreurModes && (
+            <TouchableOpacity
+              onPress={() => charger()}
+              style={styles.erreurModes}
+              accessibilityLabel="Réessayer de charger les modes du feu"
+              accessibilityRole="button"
+            >
+              <Text style={styles.erreurModesTexte}>
+                {erreurModes}{"\n"}Touche pour réessayer.
+              </Text>
+            </TouchableOpacity>
+          )}
+          {chargement && programmes.length === 0 ? (
+            <Text style={styles.vide}>Chargement des modes du feu…</Text>
+          ) : programmes.length === 0 ? (
+            !erreurModes && (
+              <Text style={styles.vide}>
+                Aucun mode sur le feu. Crée-en un ci-dessous.
+              </Text>
+            )
           ) : (
-            programmesAffiches.map((p) => (
-              <CarteProgramme
-                key={p.id}
-                programme={{ ...p, epingle: favorisIds.has(p.id) }}
-                onLancer={() => handleLancer(p.id)}
-                onOuvrir={() => router.push(`/programme/${p.id}`)}
-                onDupliquer={() => dupliquer(p.id)}
-                onSupprimer={() => supprimer(p.id)}
-              />
-            ))
+            programmes.map(renderCarte)
           )}
         </View>
 
@@ -405,83 +413,35 @@ const styles = StyleSheet.create({
   },
   erreurTexte: { ...typo.corps, color: couleurs.blanc, textAlign: "center" },
 
-  // Section Le feu
-  section: { gap: espacements.sm },
-  titreSectionRow: {
+  // Mode actuel
+  modeActuel: {
     flexDirection: "row",
     alignItems: "center",
-    gap: espacements.xs,
-  },
-  titreSection: { fontSize: 17, fontWeight: "500", color: couleurs.textePrincipal },
-  boutonsFeu: { flexDirection: "row", gap: 10 },
-  btnFeu: {
-    flex: 1,
-    minHeight: tactile.min,
-    borderRadius: 14,
-    borderWidth: 2,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 14,
-  },
-  btnFeuAllumerActif: {
-    backgroundColor: couleurs.carte,
-    borderColor: couleurs.textePrincipal,
-  },
-  btnFeuAllumerInactif: {
-    backgroundColor: couleurs.carte,
-    borderColor: couleurs.textePrincipal,
-    ...Platform.select({
-      ios: { shadowColor: couleurs.textePrincipal, shadowOpacity: 0.08, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } },
-      android: { elevation: 2 },
-    }),
-  },
-  btnFeuEteindreActif: {
-    backgroundColor: couleurs.textePrincipal,
-    borderColor: couleurs.textePrincipal,
-  },
-  btnFeuEteindreInactif: {
-    backgroundColor: couleurs.textePrincipal,
-    borderColor: couleurs.textePrincipal,
-    opacity: 0.5,
-  },
-  btnFeuInner: { flexDirection: "row", alignItems: "center", gap: 8 },
-  dotVert: { width: 10, height: 10, borderRadius: 5, backgroundColor: "#7ACB2B" },
-  btnFeuTexte: { fontSize: 16, fontWeight: "500" },
-  txtFeuActif: { color: couleurs.textePrincipal },
-  txtFeuInactif: { color: couleurs.textePrincipal },
-  txtEteindreActif: { color: couleurs.boutonTexte },
-  txtEteindreInactif: { color: couleurs.boutonTexte },
-
-  // Relancer
-  btnRelancer: {
+    justifyContent: "space-between",
     backgroundColor: couleurs.carte,
     borderWidth: 1,
     borderColor: couleurs.bordure,
     borderRadius: 14,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    gap: espacements.sm,
   },
-  relancerPlay: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: couleurs.textePrincipal,
+  modeActuelLabel: { fontSize: 13, fontWeight: "500", color: couleurs.texteSecondaire },
+  modeActuelNom: {
+    flex: 1,
+    textAlign: "right",
+    fontSize: 16,
+    fontWeight: "500",
+    color: couleurs.textePrincipal,
+  },
+  btnStopTile: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: couleurs.stop,
     alignItems: "center",
     justifyContent: "center",
-    flexShrink: 0,
   },
-  relancerTextes: { flex: 1 },
-  relancerSurtitre: {
-    fontSize: 11,
-    letterSpacing: 0.5,
-    color: couleurs.texteSecondaire,
-    fontWeight: "500",
-  },
-  relancerNom: { fontSize: 15, fontWeight: "500", color: couleurs.textePrincipal },
-  relancerChevron: { fontSize: 18, color: couleurs.texteSecondaire },
 
   // Mes programmes
   titreProgrammesRow: {
@@ -490,6 +450,17 @@ const styles = StyleSheet.create({
     gap: espacements.sm,
   },
   titreProgrammes: { fontSize: 17, fontWeight: "500", color: couleurs.textePrincipal },
+  btnRafraichir: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: couleurs.surfaceSecondaire,
+    borderWidth: 1,
+    borderColor: couleurs.bordure,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  btnRafraichirActif: { opacity: 0.5 },
   separateurDeg: {
     flex: 1,
     height: 1,
@@ -503,6 +474,18 @@ const styles = StyleSheet.create({
   },
   listeProgrammes: { gap: espacements.sm },
   vide: { ...typo.corpsSecondaire, textAlign: "center", padding: espacements.md },
+  erreurModes: {
+    backgroundColor: couleurs.surfaceSecondaire,
+    borderRadius: rayons.carte,
+    borderWidth: 1,
+    borderColor: couleurs.destructif,
+    padding: espacements.md,
+  },
+  erreurModesTexte: {
+    ...typo.corpsSecondaire,
+    color: couleurs.destructif,
+    textAlign: "center",
+  },
 
   // Créer
   btnCreer: {

@@ -8,11 +8,12 @@ import {
   StyleSheet,
   Modal,
 } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { useProgrammesStore } from "../../stores/useProgrammesStore";
 import { useReglagesStore } from "../../stores/useReglagesStore";
+import { useFavorisStore } from "../../stores/useFavorisStore";
 import SelecteurDuree from "../../components/SelecteurDuree";
 import SelecteurLampe from "../../components/SelecteurLampe";
 import ApercuCycle from "../../components/ApercuCycle";
@@ -21,7 +22,6 @@ import Confettis, { ConfettisRef } from "../../components/Confettis";
 import {
   Lampe,
   Etape,
-  Programme,
   couleurs,
   rayons,
   espacements,
@@ -30,6 +30,7 @@ import {
   libelleLampes,
   couleurPastille,
 } from "../../theme";
+import { ModeAppareil, MAX_NAME_LEN, MAX_STEPS } from "../../services/protocol";
 
 function genId(): string {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
@@ -41,6 +42,8 @@ export default function EcranProgramme() {
   const { programmes, creer, mettreAJour, supprimer, dupliquer } =
     useProgrammesStore();
   const { reglages } = useReglagesStore();
+  const { favoris, definir: definirFavori, retirer: retirerFavori } =
+    useFavorisStore();
   const confettisRef = useRef<ConfettisRef>(null);
 
   const estNouveau = id === "new";
@@ -49,6 +52,9 @@ export default function EcranProgramme() {
     : null;
 
   const [nom, setNom] = useState(programmeExistant?.nom ?? "");
+  const [favori, setFavori] = useState(
+    programmeExistant ? favoris.includes(programmeExistant.nom) : false
+  );
   const [etapes, setEtapes] = useState<Etape[]>(
     programmeExistant?.etapes ?? []
   );
@@ -59,7 +65,8 @@ export default function EcranProgramme() {
   const [ajoutLampes, setAjoutLampes] = useState(false);
   const [indexDuree, setIndexDuree] = useState<number | null>(null);
   const [showConfirmSuppr, setShowConfirmSuppr] = useState(false);
-  const [showConfirmAnnuler, setShowConfirmAnnuler] = useState(false);
+  const [erreur, setErreur] = useState<string | null>(null);
+  const [enregistrement, setEnregistrement] = useState(false);
 
   const vibrer = () => {
     if (reglages.vibrations) {
@@ -67,59 +74,58 @@ export default function EcranProgramme() {
     }
   };
 
-  const aDesModifs = (): boolean => {
-    if (!programmeExistant)
-      return nom !== "" || etapes.length > 0;
-    return (
-      nom !== programmeExistant.nom ||
-      JSON.stringify(etapes) !== JSON.stringify(programmeExistant.etapes)
-    );
-  };
-
-  const handleEnregistrer = () => {
+  const handleEnregistrer = async () => {
     vibrer();
-    const nomFinal = nom.trim() || "Programme sans nom";
-    if (estNouveau) {
-      const nouveau: Programme = {
-        id: genId(),
-        nom: nomFinal,
-        etapes,
-        epingle: false,
-        nbLancements: 0,
-        creeA: Date.now(),
-        modifieA: Date.now(),
-      };
-      creer(nouveau);
-    } else if (programmeExistant) {
-      mettreAJour(programmeExistant.id, { nom: nomFinal, etapes });
+    setErreur(null);
+    const mode: ModeAppareil = {
+      name: nom.trim(),
+      loop: true,
+      etapes,
+    };
+    setEnregistrement(true);
+    try {
+      if (estNouveau) {
+        await creer(mode);
+      } else if (programmeExistant) {
+        await mettreAJour(programmeExistant.nom, mode);
+      }
+      // Le feu identifie un mode par son nom : reporte le favori sur le nom
+      // final et nettoie l'ancien en cas de renommage.
+      if (programmeExistant && programmeExistant.nom !== mode.name) {
+        retirerFavori(programmeExistant.nom);
+      }
+      definirFavori(mode.name, favori);
+      confettisRef.current?.lancer();
+      setTimeout(() => router.back(), 600);
+    } catch (e) {
+      setErreur(e instanceof Error ? e.message : "Échec de l'enregistrement.");
+    } finally {
+      setEnregistrement(false);
     }
-    confettisRef.current?.lancer();
-    setTimeout(() => router.back(), 600);
   };
 
-  const handleSupprimer = () => {
+  const handleSupprimer = async () => {
     if (!programmeExistant) return;
-    supprimer(programmeExistant.id);
+    await supprimer(programmeExistant.nom);
+    retirerFavori(programmeExistant.nom);
     router.back();
   };
 
-  const handleDupliquer = () => {
+  const handleDupliquer = async () => {
     if (!programmeExistant) return;
     vibrer();
-    dupliquer(programmeExistant.id);
+    await dupliquer(programmeExistant.nom);
     router.back();
-  };
-
-  const handleAnnuler = () => {
-    if (aDesModifs()) {
-      setShowConfirmAnnuler(true);
-    } else {
-      router.back();
-    }
   };
 
   const ajouterEtape = (lampes: Lampe[]) => {
     if (lampes.length === 0) return;
+    if (etapes.length >= MAX_STEPS) {
+      setErreur(`Le feu accepte au maximum ${MAX_STEPS} étapes.`);
+      setAjoutLampes(false);
+      return;
+    }
+    setErreur(null);
     setEtapes((prev) => [
       ...prev,
       { id: genId(), lampes, dureeSecondes: 3 },
@@ -168,6 +174,26 @@ export default function EcranProgramme() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]}>
+      <Stack.Screen
+        options={{
+          headerRight: () => (
+            <TouchableOpacity
+              onPress={() => {
+                vibrer();
+                setFavori((v) => !v);
+              }}
+              style={styles.btnFavori}
+              accessibilityLabel={
+                favori ? "Retirer des favoris" : "Ajouter aux favoris"
+              }
+              accessibilityRole="button"
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={styles.btnFavoriTexte}>{favori ? "⭐" : "☆"}</Text>
+            </TouchableOpacity>
+          ),
+        }}
+      />
       <ScrollView
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
@@ -183,7 +209,12 @@ export default function EcranProgramme() {
             style={styles.input}
             accessibilityLabel="Nom du programme"
             returnKeyType="done"
+            maxLength={MAX_NAME_LEN}
+            autoCorrect={false}
           />
+          <Text style={styles.aide}>
+            {MAX_NAME_LEN} caractères max — le feu identifie un mode par son nom.
+          </Text>
         </View>
 
         {/* Étapes */}
@@ -282,16 +313,15 @@ export default function EcranProgramme() {
         {etapes.length > 0 && <ApercuCycle etapes={etapes} />}
       </ScrollView>
 
+      {/* Message d'erreur (validation / réseau) */}
+      {erreur && (
+        <View style={styles.bandeauErreur}>
+          <Text style={styles.bandeauErreurTexte}>{erreur}</Text>
+        </View>
+      )}
+
       {/* Barre d'actions */}
       <View style={styles.barreActions}>
-        <TouchableOpacity
-          onPress={handleAnnuler}
-          style={styles.btnAnnuler}
-          accessibilityLabel="Annuler les modifications"
-          accessibilityRole="button"
-        >
-          <Text style={styles.btnAnnulerTexte}>Annuler</Text>
-        </TouchableOpacity>
         {!estNouveau && (
           <TouchableOpacity
             onPress={handleDupliquer}
@@ -317,11 +347,14 @@ export default function EcranProgramme() {
         )}
         <TouchableOpacity
           onPress={handleEnregistrer}
-          style={styles.btnEnregistrer}
+          disabled={enregistrement}
+          style={[styles.btnEnregistrer, enregistrement && styles.btnDesactive]}
           accessibilityLabel="Enregistrer le programme"
           accessibilityRole="button"
         >
-          <Text style={styles.btnEnregistrerTexte}>Enregistrer</Text>
+          <Text style={styles.btnEnregistrerTexte}>
+            {enregistrement ? "Envoi…" : "Enregistrer"}
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -419,18 +452,6 @@ export default function EcranProgramme() {
         onAnnuler={() => setShowConfirmSuppr(false)}
         onConfirmer={handleSupprimer}
       />
-
-      <ConfirmationDialog
-        visible={showConfirmAnnuler}
-        message="Tu veux vraiment annuler les modifications ?"
-        labelAnnuler="Non, continuer"
-        labelConfirmer="Oui, annuler"
-        onAnnuler={() => setShowConfirmAnnuler(false)}
-        onConfirmer={() => {
-          setShowConfirmAnnuler(false);
-          router.back();
-        }}
-      />
     </SafeAreaView>
   );
 }
@@ -458,6 +479,18 @@ const styles = StyleSheet.create({
     textAlign: "center",
     padding: espacements.md,
   },
+  aide: { ...typo.petit },
+  bandeauErreur: {
+    backgroundColor: couleurs.destructif,
+    paddingHorizontal: espacements.md,
+    paddingVertical: espacements.sm,
+  },
+  bandeauErreurTexte: {
+    ...typo.corpsSecondaire,
+    color: couleurs.blanc,
+    textAlign: "center",
+  },
+  btnDesactive: { opacity: 0.5 },
   carteEtape: {
     flexDirection: "row",
     alignItems: "center",
@@ -531,16 +564,13 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: couleurs.bordure,
   },
-  btnAnnuler: {
-    flex: 1,
+  btnFavori: {
+    minWidth: tactile.min,
     minHeight: tactile.min,
-    borderRadius: rayons.boutonStandard,
-    borderWidth: 1,
-    borderColor: couleurs.boutonFond,
     alignItems: "center",
     justifyContent: "center",
   },
-  btnAnnulerTexte: { ...typo.bouton, color: couleurs.boutonFond },
+  btnFavoriTexte: { fontSize: 22 },
   btnDupliquer: {
     flex: 1,
     minHeight: tactile.min,

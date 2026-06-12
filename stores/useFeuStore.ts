@@ -5,7 +5,6 @@ const etatInitial: EtatFeu = {
   allume: false,
   programmeEnCours: null,
   etapeIndex: 0,
-  progression: 0,
   enPause: false,
   connexionFeu: "inconnu",
   dernierProgrammeLanceId: null,
@@ -19,7 +18,6 @@ type FeuStore = {
   setAllume: (allume: boolean) => void;
   setProgrammeEnCours: (id: string | null) => void;
   setEtapeIndex: (index: number) => void;
-  setProgression: (progression: number) => void;
   setEnPause: (enPause: boolean) => void;
   setConnexionFeu: (connexion: EtatFeu["connexionFeu"]) => void;
   setDernierProgrammeLanceId: (id: string | null) => void;
@@ -38,8 +36,6 @@ export const useFeuStore = create<FeuStore>()((set) => ({
     set((s) => ({ etat: { ...s.etat, programmeEnCours } })),
   setEtapeIndex: (etapeIndex) =>
     set((s) => ({ etat: { ...s.etat, etapeIndex } })),
-  setProgression: (progression) =>
-    set((s) => ({ etat: { ...s.etat, progression } })),
   setEnPause: (enPause) =>
     set((s) => ({ etat: { ...s.etat, enPause } })),
   setConnexionFeu: (connexionFeu) =>

@@ -6,19 +6,22 @@ import {
   StyleSheet,
   Modal,
 } from "react-native";
-import Svg, { Polygon } from "react-native-svg";
+import Svg, { Polygon, Rect } from "react-native-svg";
+import ApercuCycle from "./ApercuCycle";
 import {
   Programme,
   couleurs,
   espacements,
   typo,
   libelleLampes,
-  dureeTotaleCycle,
+  formatDuree,
 } from "../theme";
 
 type Props = {
   programme: Programme;
+  actif?: boolean;
   onLancer: () => void;
+  onArreter?: () => void;
   onOuvrir: () => void;
   onDupliquer: () => void;
   onSupprimer: () => void;
@@ -27,19 +30,20 @@ type Props = {
 function resumeCourt(programme: Programme): string {
   if (programme.etapes.length === 0) return "Aucune étape";
   return programme.etapes
-    .map((e) => `${libelleLampes(e.lampes)} ${e.dureeSecondes} s`)
+    .map((e) => `${libelleLampes(e.lampes)} ${formatDuree(e.dureeSecondes)}`)
     .join(" · ");
 }
 
 export default function CarteProgramme({
   programme,
+  actif = false,
   onLancer,
+  onArreter,
   onOuvrir,
   onDupliquer,
   onSupprimer,
 }: Props) {
   const [menuVisible, setMenuVisible] = useState(false);
-  const duree = dureeTotaleCycle(programme.etapes);
   const resume = resumeCourt(programme);
 
   return (
@@ -63,21 +67,32 @@ export default function CarteProgramme({
             )}
             <Text style={styles.nom} numberOfLines={1}>{programme.nom}</Text>
           </View>
-          <Text style={styles.resume} numberOfLines={2}>{resume}</Text>
-          <Text style={styles.stats}>Cycle {duree} s · {programme.nbLancements} fois</Text>
+          {programme.etapes.length > 0 ? (
+            <ApercuCycle etapes={programme.etapes} montrerPied={false} />
+          ) : (
+            <Text style={styles.resume} numberOfLines={2}>Aucune étape</Text>
+          )}
         </View>
 
-        {/* Bouton play */}
+        {/* Bouton play / stop (selon que le mode est actif sur le feu) */}
         <TouchableOpacity
-          onPress={onLancer}
-          style={styles.play}
-          accessibilityLabel={`Lancer ${programme.nom}`}
+          onPress={() => (actif ? onArreter?.() : onLancer())}
+          style={[styles.play, actif && styles.playActif]}
+          accessibilityLabel={
+            actif ? `Arrêter ${programme.nom}` : `Lancer ${programme.nom}`
+          }
           accessibilityRole="button"
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <Svg width={14} height={14} viewBox="0 0 14 14">
-            <Polygon points="4,3 13,7 4,11" fill={couleurs.boutonTexte} />
-          </Svg>
+          {actif ? (
+            <Svg width={12} height={12} viewBox="0 0 12 12">
+              <Rect x={1} y={1} width={10} height={10} rx={2} fill={couleurs.stopTexte} />
+            </Svg>
+          ) : (
+            <Svg width={14} height={14} viewBox="0 0 14 14">
+              <Polygon points="4,3 13,7 4,11" fill={couleurs.boutonTexte} />
+            </Svg>
+          )}
         </TouchableOpacity>
 
         {/* Menu */}
@@ -88,7 +103,7 @@ export default function CarteProgramme({
           accessibilityRole="button"
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <Text style={styles.troisPoints}>•••</Text>
+          <Text style={styles.troisPoints}>⋯</Text>
         </TouchableOpacity>
       </TouchableOpacity>
 
@@ -165,6 +180,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     flexShrink: 0,
   },
+  playActif: { backgroundColor: couleurs.stop },
   btnMenu: {
     width: 32,
     height: 40,
@@ -172,7 +188,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     flexShrink: 0,
   },
-  troisPoints: { fontSize: 14, color: couleurs.texteSecondaire, letterSpacing: 2 },
+  troisPoints: { fontSize: 22, lineHeight: 22, color: couleurs.texteSecondaire },
   fondMenu: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.45)",

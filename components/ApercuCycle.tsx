@@ -11,11 +11,14 @@ import {
 
 type Props = {
   etapes: Etape[];
+  montrerPied?: boolean;
 };
 
-export default function ApercuCycle({ etapes }: Props) {
+export default function ApercuCycle({ etapes, montrerPied = true }: Props) {
   if (etapes.length === 0) return null;
-  const total = dureeTotaleCycle(etapes);
+  // Arrondi au millième pour éviter les imprécisions de virgule flottante
+  // (ex. 0.1 + 0.2 = 0.30000000000000004).
+  const total = Math.round(dureeTotaleCycle(etapes) * 1000) / 1000;
 
   return (
     <View
@@ -56,10 +59,11 @@ export default function ApercuCycle({ etapes }: Props) {
           </View>
         ))}
       </View>
-      <View style={styles.pied}>
-        <Text style={styles.texte}>Durée du cycle : {total} s</Text>
-        <Text style={styles.texte}>puis ça recommence</Text>
-      </View>
+      {montrerPied && (
+        <View style={styles.pied}>
+          <Text style={styles.texte}>Durée du cycle : {total}s </Text>
+        </View>
+      )}
     </View>
   );
 }
