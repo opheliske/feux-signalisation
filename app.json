@@ -46,6 +46,14 @@
         {
           "photosPermission": "Mes Feux utilise tes photos pour personnaliser les icônes de programmes."
         }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
       ]
     ],
     "experiments": {
