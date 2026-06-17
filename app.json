@@ -2,6 +2,7 @@
   "expo": {
     "name": "Mes Feux",
     "slug": "mes-feux",
+    "icon": "./assets/icon.png",
     "version": "1.0.0",
     "orientation": "portrait",
     "scheme": "mes-feux",
@@ -20,6 +21,7 @@
     },
     "android": {
       "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FFD60A"
       },
       "package": "com.benoit.mesfeux",
