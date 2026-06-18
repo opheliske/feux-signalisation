@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Mes Feux",
+    "name": "My Lights",
     "slug": "mes-feux",
     "icon": "./assets/icon.png",
     "version": "1.0.0",
@@ -14,9 +14,9 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.benoit.mesfeux",
       "infoPlist": {
-        "NSCameraUsageDescription": "Mes Feux utilise la caméra pour allumer le flash en miroir du feu.",
-        "NSPhotoLibraryUsageDescription": "Mes Feux utilise tes photos pour personnaliser les icônes de programmes.",
-        "NSMicrophoneUsageDescription": "Mes Feux n'utilise pas le micro."
+        "NSCameraUsageDescription": "My Lights uses the camera to turn on the flash to mirror the light.",
+        "NSPhotoLibraryUsageDescription": "My Lights uses your photos to personalize program icons.",
+        "NSMicrophoneUsageDescription": "My Lights does not use the microphone."
       }
     },
     "android": {
@@ -40,13 +40,13 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Mes Feux utilise la caméra pour allumer le flash en miroir du feu."
+          "cameraPermission": "My Lights uses the camera to turn on the flash to mirror the light."
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "Mes Feux utilise tes photos pour personnaliser les icônes de programmes."
+          "photosPermission": "My Lights uses your photos to personalize program icons."
         }
       ],
       [

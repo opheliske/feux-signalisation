@@ -2,42 +2,44 @@ import React, { useEffect } from "react";
 import { Stack } from "expo-router";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import { couleurs } from "../theme";
-import { demarrerHeartbeat, arreterHeartbeat } from "../services/feu";
+import { colors } from "../theme";
+import { startHeartbeat, stopHeartbeat } from "../services/light";
+import { useT } from "../i18n";
 
 export default function RootLayout() {
+  const t = useT();
   useEffect(() => {
-    demarrerHeartbeat();
-    return () => arreterHeartbeat();
+    startHeartbeat();
+    return () => stopHeartbeat();
   }, []);
 
   return (
     <SafeAreaProvider>
-      <StatusBar style="dark" backgroundColor={couleurs.fondEcran} />
+      <StatusBar style="dark" backgroundColor={colors.screenBg} />
       <Stack
         screenOptions={{
-          headerStyle: { backgroundColor: couleurs.fondEcran },
-          headerTintColor: couleurs.textePrincipal,
-          contentStyle: { backgroundColor: couleurs.fondEcran },
+          headerStyle: { backgroundColor: colors.screenBg },
+          headerTintColor: colors.textPrimary,
+          contentStyle: { backgroundColor: colors.screenBg },
           headerShadowVisible: false,
         }}
       >
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen
-          name="programme/[id]"
-          options={{ title: "Programme", headerBackTitle: "Retour" }}
+          name="program/[id]"
+          options={{ title: t("nav_program"), headerBackTitle: t("common_back") }}
         />
         <Stack.Screen
-          name="reglages"
-          options={{ title: "Réglages", headerBackTitle: "Retour" }}
+          name="settings"
+          options={{ title: t("nav_settings"), headerBackTitle: t("common_back") }}
         />
         <Stack.Screen
-          name="miroir"
+          name="mirror"
           options={{ headerShown: false, presentation: "fullScreenModal" }}
         />
         <Stack.Screen
-          name="minuterie"
-          options={{ title: "Minuterie", headerBackTitle: "Retour" }}
+          name="timer"
+          options={{ title: t("nav_timer"), headerBackTitle: t("common_back") }}
         />
       </Stack>
     </SafeAreaProvider>

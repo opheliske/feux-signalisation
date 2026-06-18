@@ -17,46 +17,47 @@ import Svg, {
   Path,
   Polygon,
 } from "react-native-svg";
-import { Lampe, animation } from "../theme";
+import { Light, animation } from "../theme";
+import { useT } from "../i18n";
 
-export type LogoBouleDisco = {
-  exploser: () => void;
+export type DiscoBallLogo = {
+  explode: () => void;
 };
 
 type Props = {
   size?: number;
-  anime?: boolean;
-  lampeActive?: Lampe;
+  animated?: boolean;
+  activeLight?: Light;
 };
 
-const OVERLAY_LAMPE: Record<Lampe, string> = {
-  vert: "rgba(122,203,43,0.32)",
+const LIGHT_OVERLAY: Record<Light, string> = {
+  green: "rgba(122,203,43,0.32)",
   orange: "rgba(255,149,0,0.32)",
-  rouge: "rgba(226,75,74,0.32)",
-  eteint: "transparent",
+  red: "rgba(226,75,74,0.32)",
+  off: "transparent",
 };
 
-// ─── Géométrie ───────────────────────────────────────────────────────────
+// ─── Geometry ────────────────────────────────────────────────────────────
 const VB_W = 160;
 const VB_H = 180;
 const CX = 80;
 const CY = 100;
 const R = 52;
 
-// ─── Grille de facettes (dans la sphère) ─────────────────────────────────
-const COULEURS_FACETTES = [
+// ─── Facet grid (inside the sphere) ──────────────────────────────────────
+const FACET_COLORS = [
   "#FF4FB7", // magenta
   "#4FE3FF", // cyan
-  "#7FFF8B", // vert disco
-  "#FFE94F", // jaune
-  "#B981FF", // violet
+  "#7FFF8B", // disco green
+  "#FFE94F", // yellow
+  "#B981FF", // purple
   "#FF8E4F", // orange
 ];
 
-type Facette = { x: number; y: number; r: number; couleur?: string };
+type Facet = { x: number; y: number; r: number; color?: string };
 
-const FACETTES: Facette[] = (() => {
-  const arr: Facette[] = [];
+const FACETS: Facet[] = (() => {
+  const arr: Facet[] = [];
   const STEP = 8;
   const ROW_H = STEP * 0.866;
   let i = 0;
@@ -69,15 +70,15 @@ const FACETTES: Facette[] = (() => {
       const dy = y - CY;
       const d = Math.sqrt(dx * dx + dy * dy);
       if (d < R - 1.5) {
-        // Plus la facette est près du bord, plus elle est petite (effet bombé)
+        // The closer a facet is to the edge, the smaller it is (domed effect)
         const r = 1.1 + (1 - d / R) * 1.4;
         const colored = (i * 13) % 14 === 0;
         arr.push({
           x,
           y,
           r,
-          couleur: colored
-            ? COULEURS_FACETTES[i % COULEURS_FACETTES.length]
+          color: colored
+            ? FACET_COLORS[i % FACET_COLORS.length]
             : undefined,
         });
         i++;
@@ -87,40 +88,40 @@ const FACETTES: Facette[] = (() => {
   return arr;
 })();
 
-// Facettes qui scintillent (deux canaux pour avoir des phases différentes)
-const ETINCELLES_SPHERE = [
-  { x: 58, y: 88, r: 2.4, canal: 0 },
-  { x: 100, y: 95, r: 2.0, canal: 1 },
-  { x: 78, y: 122, r: 1.8, canal: 0 },
-  { x: 92, y: 76, r: 2.0, canal: 1 },
-  { x: 64, y: 118, r: 1.5, canal: 1 },
-  { x: 108, y: 112, r: 1.6, canal: 0 },
+// Facets that twinkle (two channels for different phases)
+const SPHERE_SPARKLES = [
+  { x: 58, y: 88, r: 2.4, channel: 0 },
+  { x: 100, y: 95, r: 2.0, channel: 1 },
+  { x: 78, y: 122, r: 1.8, channel: 0 },
+  { x: 92, y: 76, r: 2.0, channel: 1 },
+  { x: 64, y: 118, r: 1.5, channel: 1 },
+  { x: 108, y: 112, r: 1.6, channel: 0 },
 ];
 
-// Étincelles autour de la boule (ne tournent pas, scintillent)
-const ETINCELLES_AUTOUR = [
-  { x: CX + R + 10, y: CY - R - 6, taille: 6, canal: 0 },
-  { x: CX - R - 10, y: CY - R - 6, taille: 5, canal: 1 },
-  { x: CX + R + 14, y: CY + R + 8, taille: 5, canal: 1 },
-  { x: CX - R - 14, y: CY + R + 8, taille: 6, canal: 0 },
-  { x: CX, y: CY + R + 18, taille: 4, canal: 1 },
+// Sparkles around the ball (don't rotate, they twinkle)
+const AROUND_SPARKLES = [
+  { x: CX + R + 10, y: CY - R - 6, size: 6, channel: 0 },
+  { x: CX - R - 10, y: CY - R - 6, size: 5, channel: 1 },
+  { x: CX + R + 14, y: CY + R + 8, size: 5, channel: 1 },
+  { x: CX - R - 14, y: CY + R + 8, size: 6, channel: 0 },
+  { x: CX, y: CY + R + 18, size: 4, channel: 1 },
 ];
 
-// ─── Rayons lumineux ─────────────────────────────────────────────────────
-const NB_RAYONS = 12;
-function pointsRayon(angleDeg: number, longueur: number, demi: number): string {
+// ─── Light beams ───────────────────────────────────────────────────────────
+const RAY_COUNT = 12;
+function rayPoints(angleDeg: number, length: number, half: number): string {
   const a = (angleDeg * Math.PI) / 180;
   const inX = CX + Math.cos(a) * (R - 4);
   const inY = CY + Math.sin(a) * (R - 4);
-  const outX = CX + Math.cos(a) * (R + longueur);
-  const outY = CY + Math.sin(a) * (R + longueur);
-  const px = -Math.sin(a) * demi;
-  const py = Math.cos(a) * demi;
+  const outX = CX + Math.cos(a) * (R + length);
+  const outY = CY + Math.sin(a) * (R + length);
+  const px = -Math.sin(a) * half;
+  const py = Math.cos(a) * half;
   return `${inX},${inY} ${outX + px},${outY + py} ${outX - px},${outY - py}`;
 }
-const RAYONS_LUMIERE = Array.from({ length: NB_RAYONS }, (_, i) => ({
-  points: pointsRayon(
-    (i * 360) / NB_RAYONS + 11,
+const LIGHT_RAYS = Array.from({ length: RAY_COUNT }, (_, i) => ({
+  points: rayPoints(
+    (i * 360) / RAY_COUNT + 11,
     i % 2 === 0 ? 26 : 18,
     4.5
   ),
@@ -128,8 +129,9 @@ const RAYONS_LUMIERE = Array.from({ length: NB_RAYONS }, (_, i) => ({
 
 const AnimatedG = Animated.createAnimatedComponent(G);
 
-const LogoBouleDisco = forwardRef<LogoBouleDisco, Props>(
-  ({ size = 130, anime = true, lampeActive }, ref) => {
+const DiscoBallLogo = forwardRef<DiscoBallLogo, Props>(
+  ({ size = 130, animated = true, activeLight }, ref) => {
+    const t = useT();
     const rotation = useRef(new Animated.Value(0)).current;
     const scale = useRef(new Animated.Value(1)).current;
     const twinkleA = useRef(new Animated.Value(0.6)).current;
@@ -141,39 +143,39 @@ const LogoBouleDisco = forwardRef<LogoBouleDisco, Props>(
     const twinkleLoopB = useRef<Animated.CompositeAnimation | null>(null);
     const beamLoop = useRef<Animated.CompositeAnimation | null>(null);
 
-    // Rotation de la sphère.
-    // On ne dépend QUE de la présence d'une lampe active (vitesse de rotation),
-    // pas de sa couleur : ainsi un changement de couleur ne réinitialise pas la
-    // position de la boule. La teinte est appliquée directement au rendu.
-    const aLampeActive = lampeActive != null;
+    // Sphere rotation.
+    // We depend ONLY on whether a light is active (rotation speed), not on its
+    // color: that way a color change doesn't reset the ball's position. The
+    // tint is applied directly at render time.
+    const hasActiveLight = activeLight != null;
     useEffect(() => {
       animLoop.current?.stop();
-      if (!anime) {
+      if (!animated) {
         rotation.setValue(0);
         return;
       }
-      const duree = aLampeActive
-        ? animation.rotationBouleProgramme
-        : animation.rotationBouleDisco;
+      const duration = hasActiveLight
+        ? animation.programBallRotation
+        : animation.discoBallRotation;
       rotation.setValue(0);
       animLoop.current = Animated.loop(
         Animated.timing(rotation, {
           toValue: 1,
-          duration: duree,
+          duration,
           easing: Easing.linear,
           useNativeDriver: true,
         })
       );
       animLoop.current.start();
       return () => animLoop.current?.stop();
-    }, [anime, aLampeActive, rotation]);
+    }, [animated, hasActiveLight, rotation]);
 
-    // Scintillement et pulsations des rayons
+    // Twinkling and beam pulsing
     useEffect(() => {
       twinkleLoopA.current?.stop();
       twinkleLoopB.current?.stop();
       beamLoop.current?.stop();
-      if (!anime) {
+      if (!animated) {
         twinkleA.setValue(0.7);
         twinkleB.setValue(0.7);
         beamPulse.setValue(0.5);
@@ -235,10 +237,10 @@ const LogoBouleDisco = forwardRef<LogoBouleDisco, Props>(
         twinkleLoopB.current?.stop();
         beamLoop.current?.stop();
       };
-    }, [anime, twinkleA, twinkleB, beamPulse]);
+    }, [animated, twinkleA, twinkleB, beamPulse]);
 
     useImperativeHandle(ref, () => ({
-      exploser: () => {
+      explode: () => {
         animLoop.current?.stop();
         rotation.setValue(0);
         Animated.sequence([
@@ -251,7 +253,7 @@ const LogoBouleDisco = forwardRef<LogoBouleDisco, Props>(
             }),
             Animated.timing(rotation, {
               toValue: 2,
-              duration: animation.rotationBoulExplosion,
+              duration: animation.explosionRotation,
               easing: Easing.out(Easing.cubic),
               useNativeDriver: true,
             }),
@@ -263,11 +265,11 @@ const LogoBouleDisco = forwardRef<LogoBouleDisco, Props>(
             useNativeDriver: true,
           }),
         ]).start(() => {
-          if (anime) {
+          if (animated) {
             animLoop.current = Animated.loop(
               Animated.timing(rotation, {
                 toValue: 1,
-                duration: animation.rotationBouleDisco,
+                duration: animation.discoBallRotation,
                 easing: Easing.linear,
                 useNativeDriver: true,
               })
@@ -293,9 +295,9 @@ const LogoBouleDisco = forwardRef<LogoBouleDisco, Props>(
     return (
       <Animated.View
         style={{ width: w, height: h, transform: [{ scale }] }}
-        accessibilityLabel="Boule disco"
+        accessibilityLabel={t("a11y_disco_ball")}
       >
-        {/* 1 — Rayons lumineux derrière (pulsent, ne tournent pas) */}
+        {/* 1 — Light beams behind (pulse, don't rotate) */}
         <Animated.View
           style={{
             position: "absolute",
@@ -313,7 +315,7 @@ const LogoBouleDisco = forwardRef<LogoBouleDisco, Props>(
               </RadialGradient>
             </Defs>
             <Circle cx={CX} cy={CY} r={R + 32} fill="url(#halo)" />
-            {RAYONS_LUMIERE.map((r, i) => (
+            {LIGHT_RAYS.map((r, i) => (
               <Polygon
                 key={i}
                 points={r.points}
@@ -324,7 +326,7 @@ const LogoBouleDisco = forwardRef<LogoBouleDisco, Props>(
           </Svg>
         </Animated.View>
 
-        {/* 2 — Cordon (ne tourne pas, reste accroché en haut) */}
+        {/* 2 — Cord (doesn't rotate, stays attached at the top) */}
         <View style={{ position: "absolute", width: w, height: h }}>
           <Svg width={w} height={h} viewBox={`0 0 ${VB_W} ${VB_H}`}>
             <Path
@@ -337,7 +339,7 @@ const LogoBouleDisco = forwardRef<LogoBouleDisco, Props>(
           </Svg>
         </View>
 
-        {/* 3 — Sphère (tourne) avec facettes et reflets colorés */}
+        {/* 3 — Sphere (rotates) with facets and colored highlights */}
         <Animated.View
           style={{
             position: "absolute",
@@ -367,7 +369,7 @@ const LogoBouleDisco = forwardRef<LogoBouleDisco, Props>(
               </ClipPath>
             </Defs>
 
-            {/* Sphère */}
+            {/* Sphere */}
             <Circle
               cx={CX}
               cy={CY}
@@ -377,7 +379,7 @@ const LogoBouleDisco = forwardRef<LogoBouleDisco, Props>(
               strokeWidth={2}
             />
 
-            {/* Quadrillage subtil + facettes */}
+            {/* Subtle grid + facets */}
             <G clipPath="url(#sphC)">
               <G opacity={0.32}>
                 <Ellipse
@@ -418,14 +420,14 @@ const LogoBouleDisco = forwardRef<LogoBouleDisco, Props>(
                 />
               </G>
 
-              {FACETTES.map((f, i) =>
-                f.couleur ? (
+              {FACETS.map((f, i) =>
+                f.color ? (
                   <Circle
                     key={`fc-${i}`}
                     cx={f.x}
                     cy={f.y}
                     r={f.r + 0.4}
-                    fill={f.couleur}
+                    fill={f.color}
                     opacity={0.92}
                   />
                 ) : (
@@ -440,22 +442,22 @@ const LogoBouleDisco = forwardRef<LogoBouleDisco, Props>(
                 )
               )}
 
-              {/* Teinte lampe active */}
-              {lampeActive != null && lampeActive !== "eteint" && (
+              {/* Active light tint */}
+              {activeLight != null && activeLight !== "off" && (
                 <Circle
                   cx={CX}
                   cy={CY}
                   r={R}
-                  fill={OVERLAY_LAMPE[lampeActive]}
+                  fill={LIGHT_OVERLAY[activeLight]}
                 />
               )}
             </G>
 
-            {/* Facettes brillantes qui scintillent */}
-            {ETINCELLES_SPHERE.map((s, i) => (
+            {/* Bright facets that twinkle */}
+            {SPHERE_SPARKLES.map((s, i) => (
               <AnimatedG
                 key={`es-${i}`}
-                opacity={s.canal === 0 ? twinkleA : twinkleB}
+                opacity={s.channel === 0 ? twinkleA : twinkleB}
               >
                 <Circle
                   cx={s.x}
@@ -470,7 +472,7 @@ const LogoBouleDisco = forwardRef<LogoBouleDisco, Props>(
           </Svg>
         </Animated.View>
 
-        {/* 4 — Reflet brillant (ne tourne pas, donne l'effet sphère 3D) */}
+        {/* 4 — Glossy highlight (doesn't rotate, gives the 3D sphere effect) */}
         <View style={{ position: "absolute", width: w, height: h }}>
           <Svg width={w} height={h} viewBox={`0 0 ${VB_W} ${VB_H}`}>
             <Defs>
@@ -501,47 +503,47 @@ const LogoBouleDisco = forwardRef<LogoBouleDisco, Props>(
           </Svg>
         </View>
 
-        {/* 5 — Étincelles autour (ne tournent pas, scintillent) */}
+        {/* 5 — Sparkles around (don't rotate, they twinkle) */}
         <View style={{ position: "absolute", width: w, height: h }}>
           <Svg width={w} height={h} viewBox={`0 0 ${VB_W} ${VB_H}`}>
-            {ETINCELLES_AUTOUR.map((s, i) => (
+            {AROUND_SPARKLES.map((s, i) => (
               <AnimatedG
                 key={`ea-${i}`}
-                opacity={s.canal === 0 ? twinkleA : twinkleB}
+                opacity={s.channel === 0 ? twinkleA : twinkleB}
               >
                 <Line
                   x1={s.x}
-                  y1={s.y - s.taille}
+                  y1={s.y - s.size}
                   x2={s.x}
-                  y2={s.y + s.taille}
+                  y2={s.y + s.size}
                   stroke="#FFFFFF"
                   strokeWidth={1.6}
                   strokeLinecap="round"
                 />
                 <Line
-                  x1={s.x - s.taille}
+                  x1={s.x - s.size}
                   y1={s.y}
-                  x2={s.x + s.taille}
+                  x2={s.x + s.size}
                   y2={s.y}
                   stroke="#FFFFFF"
                   strokeWidth={1.6}
                   strokeLinecap="round"
                 />
                 <Line
-                  x1={s.x - s.taille * 0.55}
-                  y1={s.y - s.taille * 0.55}
-                  x2={s.x + s.taille * 0.55}
-                  y2={s.y + s.taille * 0.55}
+                  x1={s.x - s.size * 0.55}
+                  y1={s.y - s.size * 0.55}
+                  x2={s.x + s.size * 0.55}
+                  y2={s.y + s.size * 0.55}
                   stroke="#FFFFFF"
                   strokeWidth={1}
                   strokeLinecap="round"
                   opacity={0.7}
                 />
                 <Line
-                  x1={s.x - s.taille * 0.55}
-                  y1={s.y + s.taille * 0.55}
-                  x2={s.x + s.taille * 0.55}
-                  y2={s.y - s.taille * 0.55}
+                  x1={s.x - s.size * 0.55}
+                  y1={s.y + s.size * 0.55}
+                  x2={s.x + s.size * 0.55}
+                  y2={s.y - s.size * 0.55}
                   stroke="#FFFFFF"
                   strokeWidth={1}
                   strokeLinecap="round"
@@ -557,5 +559,5 @@ const LogoBouleDisco = forwardRef<LogoBouleDisco, Props>(
   }
 );
 
-LogoBouleDisco.displayName = "LogoBouleDisco";
-export default LogoBouleDisco;
+DiscoBallLogo.displayName = "DiscoBallLogo";
+export default DiscoBallLogo;

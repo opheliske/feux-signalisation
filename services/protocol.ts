@@ -1,23 +1,23 @@
-// ─── Protocole binaire du feu ──────────────────────────────────────────────
+// ─── Binary protocol of the light ──────────────────────────────────────────
 //
-// Encodage/décodage des paquets binaires échangés avec le firmware ESP32-C3.
-// Tout est en little-endian. La source de vérité est le code C du firmware
-// (main/modes/mode_decoder.c, mode_manager.c), PAS description.md qui est en
-// partie erroné (voir le plan).
+// Encoding/decoding of the binary packets exchanged with the ESP32-C3 firmware.
+// Everything is little-endian. The source of truth is the firmware C code
+// (main/modes/mode_decoder.c, mode_manager.c), NOT description.md which is
+// partly wrong (see the plan).
 //
-// Cadre POST /command : [ command_id : uint8 ] [ payload ]
+// POST /command frame: [ command_id : uint8 ] [ payload ]
 //   set    = 1 : [ name_len u16 ] [ name ]
 //   add    = 2 : [ name_len u16 ] [ name ] [ loop u8 ] [ nb_steps u16 ] [[ mask u8 ][ duration u32 ] ...]
-//   custom = 3 : (non utilisé ici)
+//   custom = 3 : (unused here)
 //   delete = 4 : [ name_len u16 ] [ name ]
 //   edit   = 5 : [ name_len u16 ] [ name ] [ loop u8 ] [ nb_steps u16 ] [[ mask u8 ][ duration u32 ] ...]
 //
 // GET /get_modes : [ count u16 ] [[ name_len u16 ][ name ][ loop u8 ][ nb_steps u16 ][[ mask u8 ][ duration u32 ] ...] ...]
 // GET /version   : [ version_len u16 ] [ version ]
 
-import { Etape, Lampe } from "../theme";
+import { Step, Light } from "../theme";
 
-// ─── Constantes (doivent refléter le firmware) ─────────────────────────────
+// ─── Constants (must mirror the firmware) ──────────────────────────────────
 
 export const CMD = {
   GET_MODES: 0,
@@ -28,27 +28,27 @@ export const CMD = {
   EDIT_MODE: 5,
 } as const;
 
-export const MAX_NAME_LEN = 100; // octets, pas caractères
+export const MAX_NAME_LEN = 100; // bytes, not characters
 export const MAX_STEPS = 10;
 
-// Bits du masque LED (led.h) : green=bit0, orange=bit1, red=bit2.
-const MASK_VERT = 0x01;
+// LED mask bits (led.h): green=bit0, orange=bit1, red=bit2.
+const MASK_GREEN = 0x01;
 const MASK_ORANGE = 0x02;
-const MASK_ROUGE = 0x04;
+const MASK_RED = 0x04;
 
-export type ModeAppareil = {
+export type DeviceMode = {
   name: string;
   loop: boolean;
-  etapes: Etape[];
+  steps: Step[];
 };
 
-// ─── UTF-8 (sans dépendre de TextEncoder/TextDecoder, absents sous Hermes) ──
+// ─── UTF-8 (without relying on TextEncoder/TextDecoder, absent under Hermes) ──
 
-export function encoderUtf8(s: string): number[] {
+export function encodeUtf8(s: string): number[] {
   const out: number[] = [];
   for (let i = 0; i < s.length; i++) {
     let code = s.charCodeAt(i);
-    // Paires de substitution (surrogate pairs)
+    // Surrogate pairs
     if (code >= 0xd800 && code <= 0xdbff && i + 1 < s.length) {
       const next = s.charCodeAt(i + 1);
       if (next >= 0xdc00 && next <= 0xdfff) {
@@ -78,11 +78,11 @@ export function encoderUtf8(s: string): number[] {
   return out;
 }
 
-export function decoderUtf8(bytes: Uint8Array, debut: number, len: number): string {
+export function decodeUtf8(bytes: Uint8Array, start: number, len: number): string {
   let s = "";
-  let i = debut;
-  const fin = debut + len;
-  while (i < fin) {
+  let i = start;
+  const end = start + len;
+  while (i < end) {
     const b0 = bytes[i++];
     let code: number;
     if (b0 < 0x80) {
@@ -111,80 +111,80 @@ export function decoderUtf8(bytes: Uint8Array, debut: number, len: number): stri
   return s;
 }
 
-// ─── Masque ↔ lampes ────────────────────────────────────────────────────────
+// ─── Mask ↔ lights ────────────────────────────────────────────────────────
 
-export function masqueDepuisLampes(lampes: Lampe[]): number {
-  let masque = 0;
-  for (const l of lampes) {
-    if (l === "vert") masque |= MASK_VERT;
-    else if (l === "orange") masque |= MASK_ORANGE;
-    else if (l === "rouge") masque |= MASK_ROUGE;
-    // "eteint" => aucun bit
+export function maskFromLights(lights: Light[]): number {
+  let mask = 0;
+  for (const l of lights) {
+    if (l === "green") mask |= MASK_GREEN;
+    else if (l === "orange") mask |= MASK_ORANGE;
+    else if (l === "red") mask |= MASK_RED;
+    // "off" => no bit
   }
-  return masque & 0xff;
+  return mask & 0xff;
 }
 
-export function lampesDepuisMasque(masque: number): Lampe[] {
-  const lampes: Lampe[] = [];
-  if (masque & MASK_VERT) lampes.push("vert");
-  if (masque & MASK_ORANGE) lampes.push("orange");
-  if (masque & MASK_ROUGE) lampes.push("rouge");
-  return lampes.length === 0 ? ["eteint"] : lampes;
+export function lightsFromMask(mask: number): Light[] {
+  const lights: Light[] = [];
+  if (mask & MASK_GREEN) lights.push("green");
+  if (mask & MASK_ORANGE) lights.push("orange");
+  if (mask & MASK_RED) lights.push("red");
+  return lights.length === 0 ? ["off"] : lights;
 }
 
-// ─── Durée ↔ ms ─────────────────────────────────────────────────────────────
+// ─── Duration ↔ ms ─────────────────────────────────────────────────────────
 
-export function msDepuisSecondes(secondes: number): number {
-  return Math.max(0, Math.round(secondes * 1000));
+export function msFromSeconds(seconds: number): number {
+  return Math.max(0, Math.round(seconds * 1000));
 }
 
-export function secondesDepuisMs(ms: number): number {
+export function secondsFromMs(ms: number): number {
   return ms / 1000;
 }
 
 // ─── Validation ─────────────────────────────────────────────────────────────
 
-export class ErreurProtocole extends Error {}
+export class ProtocolError extends Error {}
 
-function valideNom(nom: string): number[] {
-  const octets = encoderUtf8(nom);
-  if (octets.length === 0) {
-    throw new ErreurProtocole("Le nom ne peut pas être vide.");
+function validateName(name: string): number[] {
+  const bytes = encodeUtf8(name);
+  if (bytes.length === 0) {
+    throw new ProtocolError("The name cannot be empty.");
   }
-  if (octets.length > MAX_NAME_LEN) {
-    throw new ErreurProtocole(
-      `Le nom est trop long (max ${MAX_NAME_LEN} caractères).`
+  if (bytes.length > MAX_NAME_LEN) {
+    throw new ProtocolError(
+      `The name is too long (max ${MAX_NAME_LEN} characters).`
     );
   }
-  return octets;
+  return bytes;
 }
 
-function valideEtapes(etapes: Etape[]): void {
-  if (etapes.length === 0) {
-    throw new ErreurProtocole("Il faut au moins une étape.");
+function validateSteps(steps: Step[]): void {
+  if (steps.length === 0) {
+    throw new ProtocolError("At least one step is required.");
   }
-  if (etapes.length > MAX_STEPS) {
-    throw new ErreurProtocole(`Trop d'étapes (max ${MAX_STEPS}).`);
+  if (steps.length > MAX_STEPS) {
+    throw new ProtocolError(`Too many steps (max ${MAX_STEPS}).`);
   }
 }
 
-// ─── Écriture binaire ───────────────────────────────────────────────────────
+// ─── Binary writing ───────────────────────────────────────────────────────────
 
-class Ecrivain {
-  private octets: number[] = [];
+class Writer {
+  private bytes: number[] = [];
 
   u8(v: number): this {
-    this.octets.push(v & 0xff);
+    this.bytes.push(v & 0xff);
     return this;
   }
 
   u16(v: number): this {
-    this.octets.push(v & 0xff, (v >> 8) & 0xff);
+    this.bytes.push(v & 0xff, (v >> 8) & 0xff);
     return this;
   }
 
   u32(v: number): this {
-    this.octets.push(
+    this.bytes.push(
       v & 0xff,
       (v >> 8) & 0xff,
       (v >> 16) & 0xff,
@@ -193,135 +193,135 @@ class Ecrivain {
     return this;
   }
 
-  octetsBruts(bs: number[]): this {
-    for (const b of bs) this.octets.push(b & 0xff);
+  rawBytes(bs: number[]): this {
+    for (const b of bs) this.bytes.push(b & 0xff);
     return this;
   }
 
-  // Champ chaîne longueur-préfixée : [ len u16 ] [ bytes ]
-  chaine(octets: number[]): this {
-    return this.u16(octets.length).octetsBruts(octets);
+  // Length-prefixed string field: [ len u16 ] [ bytes ]
+  string(bytes: number[]): this {
+    return this.u16(bytes.length).rawBytes(bytes);
   }
 
-  // Corps commun add/edit : [ loop u8 ] [ nb_steps u16 ] [[ mask u8 ][ duration u32 ] ...]
-  corpsEtapes(loop: boolean, etapes: Etape[]): this {
-    this.u8(loop ? 1 : 0).u16(etapes.length);
-    for (const e of etapes) {
-      this.u8(masqueDepuisLampes(e.lampes)).u32(msDepuisSecondes(e.dureeSecondes));
+  // Common add/edit body: [ loop u8 ] [ nb_steps u16 ] [[ mask u8 ][ duration u32 ] ...]
+  stepsBody(loop: boolean, steps: Step[]): this {
+    this.u8(loop ? 1 : 0).u16(steps.length);
+    for (const s of steps) {
+      this.u8(maskFromLights(s.lights)).u32(msFromSeconds(s.durationSeconds));
     }
     return this;
   }
 
-  finir(): Uint8Array {
-    return Uint8Array.from(this.octets);
+  finish(): Uint8Array {
+    return Uint8Array.from(this.bytes);
   }
 }
 
-export function encoderSet(nom: string): Uint8Array {
-  const octets = valideNom(nom);
-  return new Ecrivain().u8(CMD.SET_MODE).chaine(octets).finir();
+export function encodeSet(name: string): Uint8Array {
+  const bytes = validateName(name);
+  return new Writer().u8(CMD.SET_MODE).string(bytes).finish();
 }
 
-export function encoderDelete(nom: string): Uint8Array {
-  const octets = valideNom(nom);
-  return new Ecrivain().u8(CMD.DELETE_MODE).chaine(octets).finir();
+export function encodeDelete(name: string): Uint8Array {
+  const bytes = validateName(name);
+  return new Writer().u8(CMD.DELETE_MODE).string(bytes).finish();
 }
 
-export function encoderAdd(mode: ModeAppareil): Uint8Array {
-  const octets = valideNom(mode.name);
-  valideEtapes(mode.etapes);
-  return new Ecrivain()
+export function encodeAdd(mode: DeviceMode): Uint8Array {
+  const bytes = validateName(mode.name);
+  validateSteps(mode.steps);
+  return new Writer()
     .u8(CMD.ADD_MODE)
-    .chaine(octets)
-    .corpsEtapes(mode.loop, mode.etapes)
-    .finir();
+    .string(bytes)
+    .stepsBody(mode.loop, mode.steps)
+    .finish();
 }
 
-export function encoderEdit(mode: ModeAppareil): Uint8Array {
-  const octets = valideNom(mode.name);
-  valideEtapes(mode.etapes);
-  return new Ecrivain()
+export function encodeEdit(mode: DeviceMode): Uint8Array {
+  const bytes = validateName(mode.name);
+  validateSteps(mode.steps);
+  return new Writer()
     .u8(CMD.EDIT_MODE)
-    .chaine(octets)
-    .corpsEtapes(mode.loop, mode.etapes)
-    .finir();
+    .string(bytes)
+    .stepsBody(mode.loop, mode.steps)
+    .finish();
 }
 
-// ─── Lecture binaire ────────────────────────────────────────────────────────
+// ─── Binary reading ────────────────────────────────────────────────────────
 
-class Lecteur {
-  private vue: DataView;
-  private octets: Uint8Array;
+class Reader {
+  private view: DataView;
+  private bytes: Uint8Array;
   private pos = 0;
 
   constructor(buf: ArrayBuffer) {
-    this.vue = new DataView(buf);
-    this.octets = new Uint8Array(buf);
+    this.view = new DataView(buf);
+    this.bytes = new Uint8Array(buf);
   }
 
-  get reste(): number {
-    return this.octets.length - this.pos;
+  get remaining(): number {
+    return this.bytes.length - this.pos;
   }
 
   u8(): number {
-    const v = this.vue.getUint8(this.pos);
+    const v = this.view.getUint8(this.pos);
     this.pos += 1;
     return v;
   }
 
   u16(): number {
-    const v = this.vue.getUint16(this.pos, true);
+    const v = this.view.getUint16(this.pos, true);
     this.pos += 2;
     return v;
   }
 
   u32(): number {
-    const v = this.vue.getUint32(this.pos, true);
+    const v = this.view.getUint32(this.pos, true);
     this.pos += 4;
     return v;
   }
 
-  chaine(len: number): string {
-    const s = decoderUtf8(this.octets, this.pos, len);
+  string(len: number): string {
+    const s = decodeUtf8(this.bytes, this.pos, len);
     this.pos += len;
     return s;
   }
 }
 
-export function decoderModes(buf: ArrayBuffer): ModeAppareil[] {
-  const r = new Lecteur(buf);
-  if (r.reste < 2) return [];
+export function decodeModes(buf: ArrayBuffer): DeviceMode[] {
+  const r = new Reader(buf);
+  if (r.remaining < 2) return [];
   const count = r.u16();
-  const modes: ModeAppareil[] = [];
+  const modes: DeviceMode[] = [];
   for (let i = 0; i < count; i++) {
     const nameLen = r.u16();
-    const name = r.chaine(nameLen);
+    const name = r.string(nameLen);
     const loop = r.u8() !== 0;
     const nbSteps = r.u16();
-    const etapes: Etape[] = [];
+    const steps: Step[] = [];
     for (let s = 0; s < nbSteps; s++) {
       const mask = r.u8();
-      const dureeMs = r.u32();
-      etapes.push({
+      const durationMs = r.u32();
+      steps.push({
         id: `${name}-${s}`,
-        lampes: lampesDepuisMasque(mask),
-        dureeSecondes: secondesDepuisMs(dureeMs),
+        lights: lightsFromMask(mask),
+        durationSeconds: secondsFromMs(durationMs),
       });
     }
-    modes.push({ name, loop, etapes });
+    modes.push({ name, loop, steps });
   }
   return modes;
 }
 
-export function decoderVersion(buf: ArrayBuffer): string {
-  const r = new Lecteur(buf);
-  if (r.reste < 2) return "";
+export function decodeVersion(buf: ArrayBuffer): string {
+  const r = new Reader(buf);
+  if (r.remaining < 2) return "";
   const len = r.u16();
-  return r.chaine(len);
+  return r.string(len);
 }
 
-// GET /get_mode : [ name_len u16 ][ name ]. name_len 0 => aucun mode actif.
-export function decoderModeActif(buf: ArrayBuffer): string | null {
-  const nom = decoderVersion(buf); // même encodage [ len u16 ][ bytes ]
-  return nom.length > 0 ? nom : null;
+// GET /get_mode : [ name_len u16 ][ name ]. name_len 0 => no active mode.
+export function decodeActiveMode(buf: ArrayBuffer): string | null {
+  const name = decodeVersion(buf); // same encoding [ len u16 ][ bytes ]
+  return name.length > 0 ? name : null;
 }

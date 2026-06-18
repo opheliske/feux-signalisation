@@ -1,36 +1,36 @@
-// Raccourcis écran d'accueil (iOS 3D Touch / Android long press)
-// Nécessite un build natif avec @bacons/expo-quick-actions
-// Ne fonctionne pas dans Expo Go — les deep links fonctionnent, eux.
+// Home screen shortcuts (iOS 3D Touch / Android long press)
+// Requires a native build with @bacons/expo-quick-actions
+// Does not work in Expo Go — deep links do, though.
 
 import * as Linking from "expo-linking";
-import { Programme } from "../theme";
+import { Program } from "../theme";
 
-export function ouvrirProgrammeViaDeepLink(id: string): void {
-  Linking.openURL(`mes-feux://lancer/${id}`).catch(() => {});
+export function openProgramViaDeepLink(id: string): void {
+  Linking.openURL(`mes-feux://launch/${id}`).catch(() => {});
 }
 
-// Pour activer les quick actions, installe @bacons/expo-quick-actions
-// puis remplace ce fichier par :
+// To enable quick actions, install @bacons/expo-quick-actions
+// then replace this file with:
 //
 // import * as QuickActions from 'expo-quick-actions';
-// export async function mettreAJourQuickActions(
-//   dernier: Programme | null,
-//   programmes: Programme[]
+// export async function updateQuickActions(
+//   last: Program | null,
+//   programs: Program[]
 // ): Promise<void> {
 //   const items = [];
-//   if (dernier) items.push({
-//     id: 'dernier', title: 'Lancer le dernier', subtitle: dernier.nom,
-//     params: { href: `/lancer/${dernier.id}` },
+//   if (last) items.push({
+//     id: 'last', title: 'Launch the last one', subtitle: last.name,
+//     params: { href: `/launch/${last.id}` },
 //   });
-//   programmes.filter(p => p.epingle).slice(0, 2).forEach((p, i) => {
-//     items.push({ id: `fav${i}`, title: p.nom, params: { href: `/lancer/${p.id}` } });
+//   programs.filter(p => p.pinned).slice(0, 2).forEach((p, i) => {
+//     items.push({ id: `fav${i}`, title: p.name, params: { href: `/launch/${p.id}` } });
 //   });
 //   await QuickActions.setItems(items);
 // }
 
-export async function mettreAJourQuickActions(
-  _dernier: Programme | null,
-  _programmes: Programme[]
+export async function updateQuickActions(
+  _last: Program | null,
+  _programs: Program[]
 ): Promise<void> {
-  // stub — activer via build natif
+  // stub — enable via native build
 }

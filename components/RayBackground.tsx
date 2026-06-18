@@ -14,7 +14,7 @@ const H = 260;
 const CX_RATIO = 0.5;
 const CY = 130;
 
-const RAYONS = Array.from({ length: 10 }, (_, i) => {
+const RAYS = Array.from({ length: 10 }, (_, i) => {
   const angle = (i * Math.PI * 2) / 10;
   return { angle };
 });
@@ -28,13 +28,13 @@ const POINTS = [
   { x: 0.7, y: 0.12 },
 ];
 
-const ETINCELLES = [
+const SPARKLES = [
   { x: 45, y: 45 },
   { x: 295, y: 45 },
   { x: 60, y: 210 },
 ];
 
-export default function FondRayons() {
+export default function RayBackground() {
   const { width } = useWindowDimensions();
   const cx = width * CX_RATIO;
   const rayLen = Math.max(width, H) * 0.8;
@@ -55,7 +55,7 @@ export default function FondRayons() {
 
       <Rect x={0} y={0} width={width} height={H} fill="url(#halo)" />
 
-      {RAYONS.map(({ angle }, i) => (
+      {RAYS.map(({ angle }, i) => (
         <Line
           key={i}
           x1={cx}
@@ -80,7 +80,7 @@ export default function FondRayons() {
         />
       ))}
 
-      {ETINCELLES.map((e, i) => {
+      {SPARKLES.map((e, i) => {
         const s = 6;
         return (
           <G key={i}>

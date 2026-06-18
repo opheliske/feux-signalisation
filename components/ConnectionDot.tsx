@@ -1,21 +1,27 @@
 import React from "react";
 import { View, Text, StyleSheet, Platform } from "react-native";
-import { EtatFeu, couleurs } from "../theme";
+import { LightState, colors } from "../theme";
+import { useT, TranslationKey } from "../i18n";
 
 type Props = {
-  connexion: EtatFeu["connexionFeu"];
+  connection: LightState["connection"];
 };
 
-const CONFIG: Record<EtatFeu["connexionFeu"], { dot: string; halo: string; label: string }> = {
-  connecte: { dot: "#2BA84A", halo: "#7ACB2B33", label: "Feu connecté" },
-  deconnecte: { dot: couleurs.bordureForte, halo: "#C9920033", label: "Feu non trouvé" },
-  inconnu: { dot: "#888888", halo: "#88888833", label: "Connexion…" },
+const CONFIG: Record<
+  LightState["connection"],
+  { dot: string; halo: string; labelKey: TranslationKey }
+> = {
+  connected: { dot: "#2BA84A", halo: "#7ACB2B33", labelKey: "conn_connected" },
+  disconnected: { dot: colors.borderStrong, halo: "#C9920033", labelKey: "conn_disconnected" },
+  unknown: { dot: "#888888", halo: "#88888833", labelKey: "conn_connecting" },
 };
 
-export default function PastilleConnexion({ connexion }: Props) {
-  const { dot, halo, label } = CONFIG[connexion];
+export default function ConnectionDot({ connection }: Props) {
+  const t = useT();
+  const { dot, halo, labelKey } = CONFIG[connection];
+  const label = t(labelKey);
   return (
-    <View style={styles.conteneur} accessibilityLabel={label}>
+    <View style={styles.container} accessibilityLabel={label}>
       <View style={[styles.halo, { backgroundColor: halo }]}>
         <View
           style={[
@@ -36,14 +42,14 @@ export default function PastilleConnexion({ connexion }: Props) {
 }
 
 const styles = StyleSheet.create({
-  conteneur: {
+  container: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: couleurs.blanc,
+    backgroundColor: colors.white,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: couleurs.bordure,
+    borderColor: colors.border,
     paddingVertical: 6,
     paddingLeft: 10,
     paddingRight: 14,
@@ -57,5 +63,5 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   dot: { width: 10, height: 10, borderRadius: 5 },
-  label: { fontSize: 13, fontWeight: "500", color: couleurs.textePrincipal },
+  label: { fontSize: 13, fontWeight: "500", color: colors.textPrimary },
 });

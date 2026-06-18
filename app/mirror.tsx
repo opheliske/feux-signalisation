@@ -10,39 +10,40 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useKeepAwake } from "expo-keep-awake";
-import { useFeuStore } from "../stores/useFeuStore";
-import { useProgrammesStore } from "../stores/useProgrammesStore";
-import { couleurFondMiroir, couleurs, Lampe } from "../theme";
+import { useLightStore } from "../stores/useLightStore";
+import { useProgramsStore } from "../stores/useProgramsStore";
+import { mirrorBgColor, colors, Light } from "../theme";
+import { useT } from "../i18n";
 
 const { width: W } = Dimensions.get("window");
-const RAYON = W * 0.38;
+const RADIUS = W * 0.38;
 
-export default function Miroir() {
+export default function Mirror() {
   useKeepAwake();
+  const t = useT();
   const router = useRouter();
-  const { etat, torchAllume } = useFeuStore();
-  const { programmes } = useProgrammesStore();
+  const { state, torchOn } = useLightStore();
+  const { programs } = useProgramsStore();
 
-  const programme = etat.programmeEnCours
-    ? programmes.find((p) => p.id === etat.programmeEnCours) ?? null
+  const program = state.currentProgram
+    ? programs.find((p) => p.id === state.currentProgram) ?? null
     : null;
-  const etapeActuelle = programme
-    ? (programme.etapes[etat.etapeIndex] ?? null)
+  const currentStep = program
+    ? (program.steps[state.stepIndex] ?? null)
     : null;
-  const lampes: Lampe[] =
-    etapeActuelle && etapeActuelle.lampes.length > 0
-      ? etapeActuelle.lampes
-      : ["eteint"];
-  const lampePrincipale: Lampe =
-    lampes.find((l) => l !== "eteint") ?? "eteint";
-  const fondColor = couleurFondMiroir(lampePrincipale);
+  const lights: Light[] =
+    currentStep && currentStep.lights.length > 0
+      ? currentStep.lights
+      : ["off"];
+  const mainLight: Light = lights.find((l) => l !== "off") ?? "off";
+  const bgColor = mirrorBgColor(mainLight);
 
   const pulse = useRef(new Animated.Value(1)).current;
   const animRef = useRef<Animated.CompositeAnimation | null>(null);
 
   useEffect(() => {
     animRef.current?.stop();
-    if (lampePrincipale === "eteint") {
+    if (mainLight === "off") {
       pulse.setValue(1);
       return;
     }
@@ -64,32 +65,32 @@ export default function Miroir() {
     );
     animRef.current.start();
     return () => animRef.current?.stop();
-  }, [lampePrincipale, pulse]);
+  }, [mainLight, pulse]);
 
   return (
     <TouchableOpacity
-      style={[styles.conteneur, { backgroundColor: fondColor }]}
+      style={[styles.container, { backgroundColor: bgColor }]}
       onPress={() => router.back()}
       activeOpacity={1}
-      accessibilityLabel="Fermer le mode plein écran"
+      accessibilityLabel={t("mirror_close_a11y")}
       accessibilityRole="button"
     >
       <RNStatusBar hidden />
-      <View style={styles.pile}>
-        {lampes.map((l) => {
-          const couleurCercle =
-            l !== "eteint" ? couleurs[l].allumee : "#444444";
-          const taille = (RAYON * 2) / Math.max(1, lampes.length);
+      <View style={styles.stack}>
+        {lights.map((l) => {
+          const circleColor =
+            l !== "off" ? colors[l].on : "#444444";
+          const size = (RADIUS * 2) / Math.max(1, lights.length);
           return (
             <Animated.View
               key={l}
               style={[
                 {
-                  width: taille,
-                  height: taille,
-                  borderRadius: taille / 2,
+                  width: size,
+                  height: size,
+                  borderRadius: size / 2,
                   opacity: 0.85,
-                  backgroundColor: couleurCercle,
+                  backgroundColor: circleColor,
                   transform: [{ scale: pulse }],
                 },
               ]}
@@ -97,7 +98,7 @@ export default function Miroir() {
           );
         })}
       </View>
-      {torchAllume && <TorchView />}
+      {torchOn && <TorchView />}
     </TouchableOpacity>
   );
 }
@@ -118,21 +119,21 @@ function TorchView() {
   }, []);
 
   if (!Cam) return null;
-  return <Cam style={styles.cameraCache} enableTorch />;
+  return <Cam style={styles.hiddenCamera} enableTorch />;
 }
 
 const styles = StyleSheet.create({
-  conteneur: {
+  container: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
   },
-  pile: {
+  stack: {
     alignItems: "center",
     justifyContent: "center",
     gap: 16,
   },
-  cameraCache: {
+  hiddenCamera: {
     position: "absolute",
     width: 1,
     height: 1,

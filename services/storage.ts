@@ -1,20 +1,22 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const CLE_PROGRAMMES = "programmes_benoit";
-const CLE_REGLAGES = "reglages_benoit";
+// NOTE: the storage key strings are kept as-is to preserve data already
+// persisted on existing installs (renaming them would wipe stored values).
+const KEY_PROGRAMS = "programmes_benoit";
+const KEY_SETTINGS = "reglages_benoit";
 
-export async function lireProgrammes(): Promise<string | null> {
-  return AsyncStorage.getItem(CLE_PROGRAMMES);
+export async function readPrograms(): Promise<string | null> {
+  return AsyncStorage.getItem(KEY_PROGRAMS);
 }
 
-export async function sauvegarderProgrammes(json: string): Promise<void> {
-  return AsyncStorage.setItem(CLE_PROGRAMMES, json);
+export async function savePrograms(json: string): Promise<void> {
+  return AsyncStorage.setItem(KEY_PROGRAMS, json);
 }
 
-export async function lireReglages(): Promise<string | null> {
-  return AsyncStorage.getItem(CLE_REGLAGES);
+export async function readSettings(): Promise<string | null> {
+  return AsyncStorage.getItem(KEY_SETTINGS);
 }
 
-export async function sauvegarderReglages(json: string): Promise<void> {
-  return AsyncStorage.setItem(CLE_REGLAGES, json);
+export async function saveSettings(json: string): Promise<void> {
+  return AsyncStorage.setItem(KEY_SETTINGS, json);
 }

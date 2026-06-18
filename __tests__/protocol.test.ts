@@ -1,101 +1,101 @@
 import {
   CMD,
-  encoderSet,
-  encoderDelete,
-  encoderAdd,
-  encoderEdit,
-  decoderModes,
-  decoderVersion,
-  masqueDepuisLampes,
-  lampesDepuisMasque,
-  msDepuisSecondes,
-  secondesDepuisMs,
-  encoderUtf8,
-  ErreurProtocole,
-  ModeAppareil,
+  encodeSet,
+  encodeDelete,
+  encodeAdd,
+  encodeEdit,
+  decodeModes,
+  decodeVersion,
+  maskFromLights,
+  lightsFromMask,
+  msFromSeconds,
+  secondsFromMs,
+  encodeUtf8,
+  ProtocolError,
+  DeviceMode,
   MAX_NAME_LEN,
 } from "../services/protocol";
-import { Etape, Lampe } from "../theme";
+import { Step, Light } from "../theme";
 
-// Petits helpers de test
+// Small test helpers
 function hex(...bytes: number[]): Uint8Array {
   return Uint8Array.from(bytes);
 }
 function toArray(u8: Uint8Array): number[] {
   return Array.from(u8);
 }
-function bufDepuis(bytes: number[]): ArrayBuffer {
+function bufFrom(bytes: number[]): ArrayBuffer {
   return Uint8Array.from(bytes).buffer;
 }
 function ascii(s: string): number[] {
   return Array.from(s).map((c) => c.charCodeAt(0));
 }
 
-function etape(lampes: Lampe[], dureeSecondes: number): Etape {
-  return { id: "x", lampes, dureeSecondes };
+function step(lights: Light[], durationSeconds: number): Step {
+  return { id: "x", lights, durationSeconds };
 }
 
-describe("masque <-> lampes", () => {
-  it("mappe les bits du firmware (vert=1, orange=2, rouge=4)", () => {
-    expect(masqueDepuisLampes(["vert"])).toBe(0x01);
-    expect(masqueDepuisLampes(["orange"])).toBe(0x02);
-    expect(masqueDepuisLampes(["rouge"])).toBe(0x04);
-    expect(masqueDepuisLampes(["eteint"])).toBe(0x00);
-    expect(masqueDepuisLampes(["rouge", "orange"])).toBe(0x06);
-    expect(masqueDepuisLampes(["vert", "orange", "rouge"])).toBe(0x07);
+describe("mask <-> lights", () => {
+  it("maps the firmware bits (green=1, orange=2, red=4)", () => {
+    expect(maskFromLights(["green"])).toBe(0x01);
+    expect(maskFromLights(["orange"])).toBe(0x02);
+    expect(maskFromLights(["red"])).toBe(0x04);
+    expect(maskFromLights(["off"])).toBe(0x00);
+    expect(maskFromLights(["red", "orange"])).toBe(0x06);
+    expect(maskFromLights(["green", "orange", "red"])).toBe(0x07);
   });
 
-  it("décode un masque en lampes (0 => eteint)", () => {
-    expect(lampesDepuisMasque(0x00)).toEqual(["eteint"]);
-    expect(lampesDepuisMasque(0x01)).toEqual(["vert"]);
-    expect(lampesDepuisMasque(0x06)).toEqual(["orange", "rouge"]);
-    expect(lampesDepuisMasque(0x07)).toEqual(["vert", "orange", "rouge"]);
-  });
-});
-
-describe("durée <-> ms", () => {
-  it("convertit secondes <-> ms", () => {
-    expect(msDepuisSecondes(30)).toBe(30000);
-    expect(msDepuisSecondes(3)).toBe(3000);
-    expect(msDepuisSecondes(0.5)).toBe(500);
-    expect(secondesDepuisMs(30000)).toBe(30);
-    expect(secondesDepuisMs(500)).toBe(0.5);
+  it("decodes a mask into lights (0 => off)", () => {
+    expect(lightsFromMask(0x00)).toEqual(["off"]);
+    expect(lightsFromMask(0x01)).toEqual(["green"]);
+    expect(lightsFromMask(0x06)).toEqual(["orange", "red"]);
+    expect(lightsFromMask(0x07)).toEqual(["green", "orange", "red"]);
   });
 });
 
-describe("encoderSet / encoderDelete", () => {
-  // description.md montre set avec command_id 00, MAIS l'enum réel du firmware
-  // est SET=1 (GET_MODES=0 a été préfixé). On encode donc 0x01.
-  it("encode 'standard' avec le bon command_id (1, pas 0)", () => {
-    const u8 = encoderSet("standard");
+describe("duration <-> ms", () => {
+  it("converts seconds <-> ms", () => {
+    expect(msFromSeconds(30)).toBe(30000);
+    expect(msFromSeconds(3)).toBe(3000);
+    expect(msFromSeconds(0.5)).toBe(500);
+    expect(secondsFromMs(30000)).toBe(30);
+    expect(secondsFromMs(500)).toBe(0.5);
+  });
+});
+
+describe("encodeSet / encodeDelete", () => {
+  // description.md shows set with command_id 00, BUT the real firmware enum
+  // is SET=1 (GET_MODES=0 was prefixed). So we encode 0x01.
+  it("encodes 'standard' with the right command_id (1, not 0)", () => {
+    const u8 = encodeSet("standard");
     expect(toArray(u8)).toEqual([
-      CMD.SET_MODE, // 0x01 — corrigé vs description.md
+      CMD.SET_MODE, // 0x01 — corrected vs description.md
       0x08,
       0x00,
       ...ascii("standard"),
     ]);
   });
 
-  it("encode delete avec command_id 4", () => {
-    const u8 = encoderDelete("standard");
+  it("encodes delete with command_id 4", () => {
+    const u8 = encodeDelete("standard");
     expect(toArray(u8)).toEqual([0x04, 0x08, 0x00, ...ascii("standard")]);
   });
 });
 
-describe("encoderAdd / encoderEdit", () => {
-  // Corps identique à l'exemple add de description.md ("english", loop=1, 3 étapes),
-  // mais command_id corrigé à 2 (ADD), 5 (EDIT).
-  const mode: ModeAppareil = {
+describe("encodeAdd / encodeEdit", () => {
+  // Body identical to description.md's add example ("english", loop=1, 3 steps),
+  // but command_id corrected to 2 (ADD), 5 (EDIT).
+  const mode: DeviceMode = {
     name: "english",
     loop: true,
-    etapes: [
-      etape(["vert"], 30), // 30000 ms = 30 75 00 00
-      etape(["orange"], 3), // 3000 ms  = b8 0b 00 00
-      etape(["rouge"], 30), // 30000 ms = 30 75 00 00
+    steps: [
+      step(["green"], 30), // 30000 ms = 30 75 00 00
+      step(["orange"], 3), // 3000 ms  = b8 0b 00 00
+      step(["red"], 30), // 30000 ms = 30 75 00 00
     ],
   };
 
-  const corpsAttendu = [
+  const expectedBody = [
     0x07, 0x00, // name_len = 7
     ...ascii("english"),
     0x01, // loop
@@ -105,114 +105,114 @@ describe("encoderAdd / encoderEdit", () => {
     0x04, 0x30, 0x75, 0x00, 0x00,
   ];
 
-  it("encode add (command_id 2)", () => {
-    expect(toArray(encoderAdd(mode))).toEqual([CMD.ADD_MODE, ...corpsAttendu]);
+  it("encodes add (command_id 2)", () => {
+    expect(toArray(encodeAdd(mode))).toEqual([CMD.ADD_MODE, ...expectedBody]);
   });
 
-  it("encode edit (command_id 5, même corps qu'add)", () => {
-    expect(toArray(encoderEdit(mode))).toEqual([CMD.EDIT_MODE, ...corpsAttendu]);
+  it("encodes edit (command_id 5, same body as add)", () => {
+    expect(toArray(encodeEdit(mode))).toEqual([CMD.EDIT_MODE, ...expectedBody]);
   });
 });
 
-describe("decoderModes", () => {
-  it("décode l'exemple à deux modes de description.md", () => {
-    const octets = [
+describe("decodeModes", () => {
+  it("decodes description.md's two-mode example", () => {
+    const bytes = [
       0x02, 0x00, // count = 2
       // standard
       0x08, 0x00,
       ...ascii("standard"),
       0x01, // loop
-      0x03, 0x00, // 3 étapes
-      0x01, 0x30, 0x75, 0x00, 0x00, // vert 30000ms
+      0x03, 0x00, // 3 steps
+      0x01, 0x30, 0x75, 0x00, 0x00, // green 30000ms
       0x02, 0xb8, 0x0b, 0x00, 0x00, // orange 3000ms
-      0x04, 0x30, 0x75, 0x00, 0x00, // rouge 30000ms
+      0x04, 0x30, 0x75, 0x00, 0x00, // red 30000ms
       // blinking_orange
       0x0f, 0x00,
       ...ascii("blinking_orange"),
       0x01,
-      0x02, 0x00, // 2 étapes
+      0x02, 0x00, // 2 steps
       0x02, 0xf4, 0x01, 0x00, 0x00, // orange 500ms
-      0x00, 0xf4, 0x01, 0x00, 0x00, // eteint 500ms
+      0x00, 0xf4, 0x01, 0x00, 0x00, // off 500ms
     ];
 
-    const modes = decoderModes(bufDepuis(octets));
+    const modes = decodeModes(bufFrom(bytes));
     expect(modes).toHaveLength(2);
 
     expect(modes[0].name).toBe("standard");
     expect(modes[0].loop).toBe(true);
-    expect(modes[0].etapes.map((e) => e.lampes)).toEqual([
-      ["vert"],
+    expect(modes[0].steps.map((s) => s.lights)).toEqual([
+      ["green"],
       ["orange"],
-      ["rouge"],
+      ["red"],
     ]);
-    expect(modes[0].etapes.map((e) => e.dureeSecondes)).toEqual([30, 3, 30]);
+    expect(modes[0].steps.map((s) => s.durationSeconds)).toEqual([30, 3, 30]);
 
     expect(modes[1].name).toBe("blinking_orange");
-    expect(modes[1].etapes.map((e) => e.lampes)).toEqual([
+    expect(modes[1].steps.map((s) => s.lights)).toEqual([
       ["orange"],
-      ["eteint"],
+      ["off"],
     ]);
-    expect(modes[1].etapes.map((e) => e.dureeSecondes)).toEqual([0.5, 0.5]);
+    expect(modes[1].steps.map((s) => s.durationSeconds)).toEqual([0.5, 0.5]);
   });
 
-  it("gère un payload vide / zéro mode", () => {
-    expect(decoderModes(bufDepuis([0x00, 0x00]))).toEqual([]);
-    expect(decoderModes(bufDepuis([]))).toEqual([]);
+  it("handles an empty payload / zero modes", () => {
+    expect(decodeModes(bufFrom([0x00, 0x00]))).toEqual([]);
+    expect(decodeModes(bufFrom([]))).toEqual([]);
   });
 
-  it("round-trip add -> decode pour une étape multi-lampes", () => {
-    const mode: ModeAppareil = {
+  it("round-trips add -> decode for a multi-light step", () => {
+    const mode: DeviceMode = {
       name: "mix",
       loop: false,
-      etapes: [etape(["rouge", "orange"], 3), etape(["vert"], 3)],
+      steps: [step(["red", "orange"], 3), step(["green"], 3)],
     };
-    const encode = encoderAdd(mode);
-    // Retire le command_id (1er octet) et préfixe un count=1 pour réutiliser decoderModes.
-    const corps = Array.from(encode).slice(1);
-    const modes = decoderModes(bufDepuis([0x01, 0x00, ...corps]));
+    const encoded = encodeAdd(mode);
+    // Drop the command_id (1st byte) and prefix a count=1 to reuse decodeModes.
+    const body = Array.from(encoded).slice(1);
+    const modes = decodeModes(bufFrom([0x01, 0x00, ...body]));
     expect(modes[0].name).toBe("mix");
     expect(modes[0].loop).toBe(false);
-    expect(modes[0].etapes[0].lampes).toEqual(["orange", "rouge"]);
-    expect(modes[0].etapes[1].lampes).toEqual(["vert"]);
+    expect(modes[0].steps[0].lights).toEqual(["orange", "red"]);
+    expect(modes[0].steps[1].lights).toEqual(["green"]);
   });
 });
 
-describe("decoderVersion", () => {
-  it("décode [len u16][bytes]", () => {
+describe("decodeVersion", () => {
+  it("decodes [len u16][bytes]", () => {
     const v = "1.0.0 (5c5c56)";
-    const octets = [v.length & 0xff, (v.length >> 8) & 0xff, ...ascii(v)];
-    expect(decoderVersion(bufDepuis(octets))).toBe(v);
+    const bytes = [v.length & 0xff, (v.length >> 8) & 0xff, ...ascii(v)];
+    expect(decodeVersion(bufFrom(bytes))).toBe(v);
   });
 });
 
 describe("validation", () => {
-  it("rejette un nom trop long", () => {
-    expect(() => encoderSet("a".repeat(MAX_NAME_LEN + 1))).toThrow(
-      ErreurProtocole
+  it("rejects a name that is too long", () => {
+    expect(() => encodeSet("a".repeat(MAX_NAME_LEN + 1))).toThrow(
+      ProtocolError
     );
   });
 
-  it("rejette un nom vide", () => {
-    expect(() => encoderSet("")).toThrow(ErreurProtocole);
+  it("rejects an empty name", () => {
+    expect(() => encodeSet("")).toThrow(ProtocolError);
   });
 
-  it("compte les octets UTF-8, pas les caractères (accents)", () => {
-    // "é" = 2 octets. On prend moins de MAX_NAME_LEN caractères mais assez
-    // pour dépasser MAX_NAME_LEN octets : la validation doit compter les octets.
-    const nbAccents = Math.floor(MAX_NAME_LEN / 2) + 1;
-    expect(encoderUtf8("é")).toHaveLength(2);
-    expect(nbAccents).toBeLessThanOrEqual(MAX_NAME_LEN);
-    expect(() => encoderSet("é".repeat(nbAccents))).toThrow(ErreurProtocole);
+  it("counts UTF-8 bytes, not characters (accents)", () => {
+    // "é" = 2 bytes. We take fewer than MAX_NAME_LEN characters but enough
+    // to exceed MAX_NAME_LEN bytes: validation must count bytes.
+    const accentCount = Math.floor(MAX_NAME_LEN / 2) + 1;
+    expect(encodeUtf8("é")).toHaveLength(2);
+    expect(accentCount).toBeLessThanOrEqual(MAX_NAME_LEN);
+    expect(() => encodeSet("é".repeat(accentCount))).toThrow(ProtocolError);
   });
 
-  it("rejette 0 ou > 10 étapes", () => {
-    const base = (n: number): ModeAppareil => ({
+  it("rejects 0 or > 10 steps", () => {
+    const base = (n: number): DeviceMode => ({
       name: "x",
       loop: true,
-      etapes: Array.from({ length: n }, () => etape(["vert"], 1)),
+      steps: Array.from({ length: n }, () => step(["green"], 1)),
     });
-    expect(() => encoderAdd(base(0))).toThrow(ErreurProtocole);
-    expect(() => encoderAdd(base(11))).toThrow(ErreurProtocole);
-    expect(() => encoderAdd(base(10))).not.toThrow();
+    expect(() => encodeAdd(base(0))).toThrow(ProtocolError);
+    expect(() => encodeAdd(base(11))).toThrow(ProtocolError);
+    expect(() => encodeAdd(base(10))).not.toThrow();
   });
 });

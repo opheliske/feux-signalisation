@@ -1,45 +1,44 @@
-import { Lampe, Reglages } from "../theme";
-import { useFeuStore } from "../stores/useFeuStore";
+import { Light, Settings } from "../theme";
+import { useLightStore } from "../stores/useLightStore";
 
-// Pour activer les sons, place des fichiers audio dans assets/sons/ :
-//   assets/sons/vert.mp3, orange.mp3, rouge.mp3, eteint.mp3
-// puis décommente les lignes require() ci-dessous.
+// To enable sounds, drop audio files into assets/sons/:
+//   assets/sons/green.mp3, orange.mp3, red.mp3, off.mp3
+// then uncomment the require() lines below.
 
-// const SONS: Partial<Record<Lampe, number>> = {
-//   vert:   require("../assets/sons/vert.mp3"),
+// const SOUNDS: Partial<Record<Light, number>> = {
+//   green:  require("../assets/sons/green.mp3"),
 //   orange: require("../assets/sons/orange.mp3"),
-//   rouge:  require("../assets/sons/rouge.mp3"),
-//   eteint: require("../assets/sons/eteint.mp3"),
+//   red:    require("../assets/sons/red.mp3"),
+//   off:    require("../assets/sons/off.mp3"),
 // };
 
-export async function surChangementEtape(
-  lampes: Lampe[],
-  reglages: Reglages
+export async function onStepChange(
+  lights: Light[],
+  settings: Settings
 ): Promise<void> {
-  const lampePrincipale: Lampe =
-    lampes.find((l) => l !== "eteint") ?? "eteint";
+  const mainLight: Light = lights.find((l) => l !== "off") ?? "off";
 
-  if (reglages.ledFlash) {
-    // torchAllume est lu par le CameraView caché dans le miroir
-    useFeuStore.getState().setTorchAllume(lampePrincipale !== "eteint");
+  if (settings.ledFlash) {
+    // torchOn is read by the hidden CameraView in the mirror
+    useLightStore.getState().setTorchOn(mainLight !== "off");
   }
 
-  if (reglages.sons) {
-    await _jouerSon(lampePrincipale);
-  }
-}
-
-export async function surArret(reglages: Reglages): Promise<void> {
-  if (reglages.ledFlash) {
-    useFeuStore.getState().setTorchAllume(false);
-  }
-  if (reglages.sons) {
-    await _jouerSon("eteint");
+  if (settings.sounds) {
+    await _playSound(mainLight);
   }
 }
 
-async function _jouerSon(lampe: Lampe): Promise<void> {
-  // const source = SONS[lampe];
+export async function onStop(settings: Settings): Promise<void> {
+  if (settings.ledFlash) {
+    useLightStore.getState().setTorchOn(false);
+  }
+  if (settings.sounds) {
+    await _playSound("off");
+  }
+}
+
+async function _playSound(light: Light): Promise<void> {
+  // const source = SOUNDS[light];
   // if (!source) return;
   // try {
   //   const { Audio } = await import("expo-av");
@@ -49,7 +48,7 @@ async function _jouerSon(lampe: Lampe): Promise<void> {
   //     if (s.isLoaded && s.didJustFinish) sound.unloadAsync();
   //   });
   // } catch (e) {
-  //   console.warn("[stimulation] son:", e);
+  //   console.warn("[stimulation] sound:", e);
   // }
-  console.log(`[stimulation mock] son → ${lampe}`);
+  console.log(`[stimulation mock] sound → ${light}`);
 }

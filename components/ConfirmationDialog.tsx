@@ -6,53 +6,57 @@ import {
   TouchableOpacity,
   StyleSheet,
 } from "react-native";
-import { couleurs, rayons, espacements, typo, tactile } from "../theme";
+import { colors, radii, spacing, typo, touch } from "../theme";
+import { useT } from "../i18n";
 
 type Props = {
   visible: boolean;
   message: string;
-  onConfirmer: () => void;
-  onAnnuler: () => void;
-  labelConfirmer?: string;
-  labelAnnuler?: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+  confirmLabel?: string;
+  cancelLabel?: string;
 };
 
 export default function ConfirmationDialog({
   visible,
   message,
-  onConfirmer,
-  onAnnuler,
-  labelConfirmer = "Oui, supprimer",
-  labelAnnuler = "Non, garder",
+  onConfirm,
+  onCancel,
+  confirmLabel,
+  cancelLabel,
 }: Props) {
+  const t = useT();
+  const confirm = confirmLabel ?? t("prog_delete_confirm");
+  const cancel = cancelLabel ?? t("prog_keep");
   return (
     <Modal
       visible={visible}
       transparent
       animationType="fade"
       accessibilityViewIsModal
-      onRequestClose={onAnnuler}
+      onRequestClose={onCancel}
     >
-      <View style={styles.fond}>
-        <View style={styles.boite}>
+      <View style={styles.backdrop}>
+        <View style={styles.box}>
           <Text style={styles.message}>{message}</Text>
-          <View style={styles.boutons}>
-            {/* Bouton non-destructif en premier, par défaut */}
+          <View style={styles.buttons}>
+            {/* Non-destructive button first, default */}
             <TouchableOpacity
-              onPress={onAnnuler}
-              style={styles.btnGarder}
-              accessibilityLabel={labelAnnuler}
+              onPress={onCancel}
+              style={styles.btnKeep}
+              accessibilityLabel={cancel}
               accessibilityRole="button"
             >
-              <Text style={styles.txtGarder}>{labelAnnuler}</Text>
+              <Text style={styles.txtKeep}>{cancel}</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              onPress={onConfirmer}
-              style={styles.btnSupprimer}
-              accessibilityLabel={labelConfirmer}
+              onPress={onConfirm}
+              style={styles.btnDelete}
+              accessibilityLabel={confirm}
               accessibilityRole="button"
             >
-              <Text style={styles.txtSupprimer}>{labelConfirmer}</Text>
+              <Text style={styles.txtDelete}>{confirm}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -62,42 +66,42 @@ export default function ConfirmationDialog({
 }
 
 const styles = StyleSheet.create({
-  fond: {
+  backdrop: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "center",
     alignItems: "center",
-    padding: espacements.lg,
+    padding: spacing.lg,
   },
-  boite: {
-    backgroundColor: couleurs.carte,
-    borderRadius: rayons.carteLarge,
-    padding: espacements.lg,
+  box: {
+    backgroundColor: colors.card,
+    borderRadius: radii.cardLarge,
+    padding: spacing.lg,
     width: "100%",
-    gap: espacements.md,
+    gap: spacing.md,
   },
   message: {
-    ...typo.titre,
+    ...typo.title,
     textAlign: "center",
   },
-  boutons: { flexDirection: "column", gap: espacements.sm },
-  btnGarder: {
-    backgroundColor: couleurs.boutonFond,
-    borderRadius: rayons.boutonStandard,
-    minHeight: tactile.min,
+  buttons: { flexDirection: "column", gap: spacing.sm },
+  btnKeep: {
+    backgroundColor: colors.buttonBg,
+    borderRadius: radii.standardButton,
+    minHeight: touch.min,
     alignItems: "center",
     justifyContent: "center",
-    padding: espacements.md,
+    padding: spacing.md,
   },
-  txtGarder: { ...typo.bouton, color: couleurs.boutonTexte },
-  btnSupprimer: {
+  txtKeep: { ...typo.button, color: colors.buttonText },
+  btnDelete: {
     borderWidth: 2,
-    borderColor: couleurs.destructif,
-    borderRadius: rayons.boutonStandard,
-    minHeight: tactile.min,
+    borderColor: colors.destructive,
+    borderRadius: radii.standardButton,
+    minHeight: touch.min,
     alignItems: "center",
     justifyContent: "center",
-    padding: espacements.md,
+    padding: spacing.md,
   },
-  txtSupprimer: { ...typo.bouton, color: couleurs.destructif },
+  txtDelete: { ...typo.button, color: colors.destructive },
 });
