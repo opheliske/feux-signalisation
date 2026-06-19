@@ -1,6 +1,10 @@
-# My Lights
+# Traffic Light 🚦 - companion app
 
-Mobile app for Benoit — controls a physical traffic light (green, orange, red lamps) from his phone.
+![](./docs/github_banner.png)
+
+Mobile app for [Traffic Light projet](https://github.com/adriencarbonaro/traffic-light).
+
+Controls a physical traffic light (green, orange, red lamps) from your phone.
 
 The light works through **modes**: named, looping sequences of steps (a combination of lamps + duration). The app lets you list, launch, create, edit and delete these modes on the device.
 
@@ -60,3 +64,9 @@ npm test
 The tests cover:
 - the **binary protocol** ([`services/protocol.ts`](services/protocol.ts)): packet encoding/decoding, lamp masks, duration conversions;
 - the **playback engine** ([`services/playbackEngine.ts`](services/playbackEngine.ts)): step progression, looping, pause, resume, stop.
+
+## Screenshots
+
+![traffic_light_mobile_app_01](./docs/traffic_light_mobile_app_01.jpg)
+![traffic_light_mobile_app_02](./docs/traffic_light_mobile_app_02.jpg)
+![traffic_light_mobile_app_03](./docs/traffic_light_mobile_app_03.jpg)
